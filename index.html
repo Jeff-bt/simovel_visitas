@@ -1,0 +1,1985 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simóvel — Gestão de Salas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  // aplica o tema salvo antes de desenhar a página (evita piscar)
+  try { document.documentElement.dataset.theme = localStorage.getItem('simovel-tema') || 'light'; } catch (e) { }
+</script>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #f9fafb;
+    --border: #e3e6ea;
+    --text: #1d2330;
+    --muted: #6b7280;
+    --accent: #2f5bea;
+    --alugada: #d64545;
+    --alugada-bg: #fdecec;
+    --disponivel: #1f9d55;
+    --disponivel-bg: #e6f6ed;
+    --processo: #d98a00;
+    --processo-bg: #fff4dc;
+    --indisponivel: #6b7280;
+    --indisponivel-bg: #eceef1;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.04);
+  }
+  @media all { /* tema escuro: só com data-theme="dark" */
+    :root[data-theme="dark"] {
+      --bg: #12151b;
+      --surface: #1b1f27;
+      --surface-2: #222731;
+      --border: #2e3440;
+      --text: #e6e8ec;
+      --muted: #9aa3b2;
+      --accent: #6d8dff;
+      --alugada: #f07171;
+      --alugada-bg: #3a2023;
+      --disponivel: #4cc985;
+      --disponivel-bg: #1b3326;
+      --processo: #f2b544;
+      --processo-bg: #3a2f17;
+      --indisponivel: #9aa3b2;
+      --indisponivel-bg: #2a2f38;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header h1 span { color: var(--accent); }
+  nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  nav button {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font: inherit;
+  }
+  nav button.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .kpi .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .kpi.alugada .value { color: var(--alugada); }
+  .kpi.disponivel .value { color: var(--disponivel); }
+  .kpi.processo .value { color: var(--processo); }
+  .kpi.indisponivel .value { color: var(--indisponivel); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow); margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .muted { font-weight: 400; }
+
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .toolbar input, .toolbar select {
+    font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text);
+  }
+  .toolbar input[type=search] { min-width: 220px; flex: 1; max-width: 320px; }
+  .chip {
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .dot.alugada { background: var(--alugada); }
+  .dot.disponivel { background: var(--disponivel); }
+  .dot.processo { background: var(--processo); }
+  .dot.indisponivel { background: var(--indisponivel); }
+
+  /* Planta: sala grande em cada ponta, 3 salas + 2 salas ao longo da parede de cima, área livre embaixo.
+     Visual de maquete: o fundo da .plan é o topo das paredes, os gaps do grid são as paredes internas. */
+  :root {
+    --terreno: #26282c;
+    --parede: #f6f3ee;
+    --parede-face: #d9d2c6;
+    --parede-face-lado: #e6e0d6;
+    --parede-aresta: rgba(70, 55, 40, .28);
+    --ao: rgba(45, 28, 12, .38);
+    --luz-janela: rgba(255, 238, 205, .32);
+    --piso-corredor: #ece8e1;
+    --rejunte: rgba(120, 108, 92, .22);
+    --placa-bg: rgba(255, 255, 255, .86);
+    --placa-texto: #1d2330;
+    --placa-muted: #6b6560;
+    --escurecer: transparent;
+    /* tábuas de madeira (veio com feTurbulence) */
+    --madeira: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='240'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.012' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.28 0 0 0 0 0.15 0 0 0 0 0.06 0 0 0 0.7 -0.12'/%3E%3C/filter%3E%3Cg%3E%3Crect x='0' y='0' width='16' height='110' fill='%23b8895c'/%3E%3Crect x='0' y='110' width='16' height='130' fill='%23a97a4f'/%3E%3Crect x='16' y='0' width='16' height='40' fill='%23c29467'/%3E%3Crect x='16' y='40' width='16' height='130' fill='%23b8895c'/%3E%3Crect x='16' y='170' width='16' height='70' fill='%23c29467'/%3E%3Crect x='32' y='0' width='16' height='150' fill='%23a97a4f'/%3E%3Crect x='32' y='150' width='16' height='90' fill='%23bd8f62'/%3E%3Crect x='48' y='0' width='16' height='70' fill='%23a37449'/%3E%3Crect x='48' y='70' width='16' height='130' fill='%23b48558'/%3E%3Crect x='48' y='200' width='16' height='40' fill='%23a37449'/%3E%3Crect x='64' y='0' width='16' height='20' fill='%23b8895c'/%3E%3Crect x='64' y='20' width='16' height='110' fill='%23c29467'/%3E%3Crect x='64' y='130' width='16' height='110' fill='%23b8895c'/%3E%3Crect x='80' y='0' width='16' height='90' fill='%23bb8c5f'/%3E%3Crect x='80' y='90' width='16' height='130' fill='%23a97a4f'/%3E%3Crect x='80' y='220' width='16' height='20' fill='%23bb8c5f'/%3E%3C/g%3E%3Crect width='96' height='240' filter='url(%23g)'/%3E%3Cg fill='rgba(60,35,15,0.45)'%3E%3Crect x='15.5' width='1' height='240'/%3E%3Crect x='31.5' width='1' height='240'/%3E%3Crect x='47.5' width='1' height='240'/%3E%3Crect x='63.5' width='1' height='240'/%3E%3Crect x='79.5' width='1' height='240'/%3E%3Crect x='95.5' width='1' height='240'/%3E%3Crect x='0' y='110' width='16' height='1'/%3E%3Crect x='0' y='0' width='16' height='1'/%3E%3Crect x='16' y='40' width='16' height='1'/%3E%3Crect x='16' y='170' width='16' height='1'/%3E%3Crect x='32' y='150' width='16' height='1'/%3E%3Crect x='32' y='0' width='16' height='1'/%3E%3Crect x='48' y='70' width='16' height='1'/%3E%3Crect x='48' y='200' width='16' height='1'/%3E%3Crect x='64' y='20' width='16' height='1'/%3E%3Crect x='64' y='130' width='16' height='1'/%3E%3Crect x='80' y='90' width='16' height='1'/%3E%3Crect x='80' y='220' width='16' height='1'/%3E%3C/g%3E%3C/svg%3E");
+    /* cimento queimado */
+    --cimento: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.035' numOctaves='4' seed='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.3 0 0 0 0 0.3 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='160' height='160' fill='%23a29e97'/%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  @media all { /* tema escuro: só com data-theme="dark" */
+    :root[data-theme="dark"] {
+      --terreno: #0b0d10;
+      --parede: #dcd7ce;
+      --parede-face: #b1aa9e;
+      --parede-face-lado: #c3bcb1;
+      --piso-corredor: #c9c4bb;
+      --placa-bg: rgba(22, 25, 31, .84);
+      --placa-texto: #eceef1;
+      --placa-muted: #a4abb6;
+      --escurecer: rgba(10, 12, 16, .28);
+    }
+  }
+  .floors { display: flex; flex-direction: column; gap: 22px; }
+  .floor {
+    overflow-x: auto; border-radius: 14px; padding: 18px 26px 36px;
+    /* papel de prancha: grafite com malha técnica */
+    background:
+      linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px) 0 0 / 24px 24px,
+      radial-gradient(ellipse at 50% 40%, #33363b, var(--terreno) 75%);
+  }
+  .floor-title {
+    font-size: 11px; color: #e4e1db; text-transform: uppercase; letter-spacing: .22em; margin-bottom: 18px; font-weight: 600;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .floor-title::after { content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, .12); }
+  .floor-title small { font-weight: 400; letter-spacing: .08em; color: #8f949c; text-transform: none; font-size: 12px; }
+  .plan {
+    display: grid;
+    /* ponta | s2 | s3 | s4 | vão | s5 | s6 | ponta */
+    grid-template-columns: 1.25fr 1fr 1fr 1fr .45fr 1fr 1fr 1.25fr;
+    grid-template-rows: 200px 1fr;
+    gap: 12px;
+    min-width: 900px;
+    height: 320px;
+    padding: 16px;
+    background: linear-gradient(180deg, #fff 0, var(--parede) 40%);
+    /* aresta, face externa da parede de baixo e sombra do prédio no terreno */
+    box-shadow:
+      0 0 0 1px var(--parede-aresta),
+      0 10px 0 var(--parede-face),
+      0 11px 0 var(--parede-aresta),
+      0 30px 40px -6px rgba(0, 0, 0, .65),
+      0 60px 80px -20px rgba(0, 0, 0, .45);
+  }
+  /* escada entre os blocos: degraus brancos com quina iluminada, longarinas, corrimão de vidro,
+     linha de corte (convenção de planta) e passagem para o corredor */
+  .plan .escada {
+    grid-column: 5; grid-row: 1; position: relative; overflow: visible;
+    background:
+      /* longarinas claras + corrimão de vidro */
+      linear-gradient(90deg, #cfc7ba 0 4px, rgba(175, 205, 220, .75) 4px 6px, transparent 6px calc(100% - 6px), rgba(175, 205, 220, .75) calc(100% - 6px) calc(100% - 4px), #cfc7ba calc(100% - 4px)),
+      /* luz: degraus de cima mais claros, de baixo mais escuros */
+      linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 40%, rgba(60, 45, 30, .16)),
+      /* sombra nas laterais de cada degrau */
+      linear-gradient(90deg, rgba(60, 45, 30, .10), transparent 24%, transparent 76%, rgba(60, 45, 30, .10)),
+      /* degraus: quina clara, sombra do espelho embaixo */
+      repeating-linear-gradient(180deg, rgba(255, 255, 255, 1) 0 1px, transparent 1px 12px, rgba(70, 55, 40, .30) 12px 13px, rgba(70, 55, 40, .08) 13px 16px),
+      /* pedra branca com leve brilho */
+      linear-gradient(90deg, #eeeae3, #fdfcfa 35%, #f6f3ee 65%, #eeeae3);
+    box-shadow:
+      0 0 0 1px var(--parede-aresta),
+      inset 0 11px 0 var(--parede-face),
+      inset 0 12px 0 var(--parede-aresta),
+      inset 0 26px 22px -12px var(--ao),
+      inset 10px 0 12px -10px var(--ao),
+      inset -10px 0 12px -10px var(--ao);
+  }
+  .plan .escada::after { content: ""; position: absolute; left: 0; right: 0; bottom: -12px; height: 12px; background: var(--piso-corredor); }
+  /* linha de corte: diagonal fina com a faixa clara de "interrupção" */
+  .escada .corte {
+    position: absolute; left: 0; right: 0; top: 24%; height: 34px; pointer-events: none;
+    background:
+      linear-gradient(to top right, transparent calc(50% - 3px), rgba(250, 247, 242, .85) calc(50% - 3px) calc(50% - 1px), #2e2620 calc(50% - 1px) calc(50% + .5px), rgba(250, 247, 242, .85) calc(50% + .5px) calc(50% + 2.5px), transparent calc(50% + 2.5px));
+  }
+  .escada .rotulo {
+    position: absolute; left: 50%; top: 64%; transform: translate(-50%, -50%); writing-mode: vertical-rl;
+    font: 500 8.5px/1 var(--mono, monospace); letter-spacing: .32em; text-transform: uppercase; color: #3b332c;
+    background: rgba(250, 247, 242, .92); border: 1px solid rgba(60, 45, 30, .22); padding: 7px 3px 5px; border-radius: 2px; white-space: nowrap;
+  }
+  .map-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .map-head .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .map-head input {
+    font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); min-width: 240px;
+  }
+  .chip b { font-weight: 700; }
+  .map-foot { font-size: 12px; margin-top: 12px; }
+  .resumo { color: var(--muted); font-size: 13px; }
+  .resumo b { color: var(--text); }
+  .grid-2.even { grid-template-columns: 1fr 1fr; }
+
+  /* conteúdo do cartão da sala (plaquinha sobre o piso) */
+  .room .tag {
+    position: relative; z-index: 3; display: flex; flex-direction: column; overflow: hidden;
+    align-self: stretch; max-height: 100%; padding: 7px 9px 8px; border-radius: 6px;
+    background: var(--placa-bg); color: var(--placa-texto);
+    -webkit-backdrop-filter: blur(6px) saturate(1.2); backdrop-filter: blur(6px) saturate(1.2);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset, 0 6px 16px -4px rgba(30, 15, 0, .35), 0 0 0 1px rgba(0, 0, 0, .06);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .room .top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .room .num { font-size: 17px; font-weight: 700; line-height: 1; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .room .vis { font-size: 10.5px; color: var(--placa-muted); white-space: nowrap; }
+  .room .st {
+    display: flex; align-items: center; gap: 5px; margin-top: 5px;
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--cor);
+  }
+  .room .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--cor); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cor) 22%, transparent); }
+  .room .who { margin-top: 6px; font-size: 11.5px; font-weight: 600; line-height: 1.3; }
+  .room .who small { display: block; font-weight: 400; color: var(--placa-muted); font-size: 10.5px; }
+  .room .pend {
+    margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(128, 128, 128, .2);
+    font-size: 10.5px; font-weight: 600; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .room .pend.problema { color: var(--alugada); }
+  .room .pend.atencao { color: var(--processo); }
+  .pend-list { list-style: none; margin: 0; padding: 0; }
+  .pend-list li { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .pend-list li:last-child { border-bottom: 0; }
+  .pend-list li:hover { color: var(--accent); }
+  .pend-list .sala { font-weight: 700; width: 38px; }
+  /* faces internas das paredes (altura) + oclusão de ambiente no pé da parede */
+  .plan .corredor, .plan .room {
+    box-shadow:
+      0 0 0 1px var(--parede-aresta),
+      inset 0 11px 0 var(--parede-face),
+      inset 0 12px 0 var(--parede-aresta),
+      inset 4px 0 0 var(--parede-face-lado),
+      inset -4px 0 0 var(--parede-face-lado),
+      inset 0 26px 22px -12px var(--ao),
+      inset 14px 0 16px -12px var(--ao),
+      inset -14px 0 16px -12px var(--ao),
+      inset 0 -12px 14px -10px var(--ao);
+  }
+  .plan .corredor {
+    grid-column: 2 / 8; grid-row: 2;
+    display: flex; align-items: center; justify-content: center; padding-top: 10px;
+    color: rgba(90, 80, 68, .7); font-size: 10px; letter-spacing: .45em; text-transform: uppercase; font-weight: 600;
+    /* porcelanato grande com brilho */
+    background:
+      linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .45) 45%, transparent 60%),
+      linear-gradient(var(--rejunte) 1px, transparent 1px) 0 0 / 48px 48px,
+      linear-gradient(90deg, var(--rejunte) 1px, transparent 1px) 0 0 / 48px 48px,
+      var(--piso-corredor);
+  }
+  .room.pos-p1 { grid-column: 1; grid-row: 1 / 3; }
+  .room.pos-p2 { grid-column: 8; grid-row: 1 / 3; }
+  .room.pos-a1 { grid-column: 2; grid-row: 1; }
+  .room.pos-a2 { grid-column: 3; grid-row: 1; }
+  .room.pos-a3 { grid-column: 4; grid-row: 1; }
+  .room.pos-b1 { grid-column: 6; grid-row: 1; }
+  .room.pos-b2 { grid-column: 7; grid-row: 1; }
+  .room {
+    display: flex; flex-direction: column; align-items: flex-start; padding: 19px 9px 9px; border: 0; border-radius: 0;
+    cursor: pointer; position: relative; text-align: left; font: inherit; color: var(--text);
+    transition: filter .2s, opacity .2s;
+    /* luz da janela, vinheta e piso de madeira */
+    background:
+      radial-gradient(130% 55% at 50% 0%, var(--luz-janela), transparent 70%),
+      radial-gradient(ellipse at 50% 55%, transparent 50%, rgba(30, 15, 0, .16)),
+      linear-gradient(var(--escurecer), var(--escurecer)),
+      linear-gradient(var(--tinta), var(--tinta)),
+      var(--madeira) 0 0 / 96px 240px;
+  }
+  .room.pos-p1, .room.pos-p2 {
+    background:
+      radial-gradient(90% 45% at 50% 100%, var(--luz-janela), transparent 70%),
+      radial-gradient(ellipse at 50% 55%, transparent 50%, rgba(30, 15, 0, .16)),
+      linear-gradient(var(--escurecer), var(--escurecer)),
+      linear-gradient(var(--tinta), var(--tinta)),
+      var(--madeira) 0 0 / 96px 240px;
+  }
+  .room.pos-p1 { --lado-janela: 0%; }
+  .room.pos-p2 { --lado-janela: 100%; }
+  .room:hover { filter: brightness(1.07) saturate(1.05); }
+  .room:hover .tag { transform: translateY(-2px); box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset, 0 12px 24px -6px rgba(30, 15, 0, .45), 0 0 0 1px var(--accent); }
+  .room:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .room.alugada { --cor: var(--alugada); --tinta: transparent; }
+  .room.disponivel { --cor: var(--disponivel); --tinta: transparent; }
+  .room.processo { --cor: var(--processo); --tinta: transparent; }
+  .room.indisponivel { --cor: var(--indisponivel); --tinta: transparent; }
+  .room.dim { opacity: .28; filter: grayscale(.9); }
+
+  /* janela: duas linhas de vidro dentro da espessura da parede externa */
+  .room .janela {
+    position: absolute; z-index: 1; top: -16px; left: 20%; width: 60%; height: 16px;
+    background: linear-gradient(180deg, transparent 6px, rgba(40, 60, 75, .6) 6px 7px, #c4d7e2 7px 9px, rgba(40, 60, 75, .6) 9px 10px, transparent 10px);
+    border-left: 2px solid var(--parede-aresta); border-right: 2px solid var(--parede-aresta);
+  }
+  .room.pos-p1 .janela, .room.pos-p2 .janela {
+    top: 22%; left: -16px; width: 16px; height: 32%; border: 0;
+    background: linear-gradient(90deg, transparent 6px, rgba(40, 60, 75, .6) 6px 7px, #c4d7e2 7px 9px, rgba(40, 60, 75, .6) 9px 10px, transparent 10px);
+    border-top: 2px solid var(--parede-aresta); border-bottom: 2px solid var(--parede-aresta);
+  }
+  .room.pos-p2 .janela { left: auto; right: -16px; }
+
+  /* porta: vão na parede + folha + arco de abertura (convenção de planta) */
+  .room .porta { position: absolute; z-index: 1; bottom: -12px; left: 12px; width: 28px; height: 12px; background: var(--piso-corredor); }
+  .room .porta::before, .room .porta::after { content: ""; position: absolute; }
+  .room .porta::before { left: 0; bottom: 12px; width: 2px; height: 28px; background: #3b332c; }
+  .room .porta::after {
+    left: 0; bottom: 12px; width: 28px; height: 28px;
+    border-top: 1px dashed rgba(50, 35, 20, .55); border-right: 1px dashed rgba(50, 35, 20, .55); border-top-right-radius: 100%;
+  }
+  .room.pos-p1 .porta, .room.pos-p2 .porta { bottom: 22px; left: auto; right: -12px; width: 12px; height: 28px; }
+  .room.pos-p1 .porta::before { left: auto; right: 12px; bottom: 0; width: 28px; height: 2px; }
+  .room.pos-p1 .porta::after { left: auto; right: 12px; bottom: 0; border: 0; border-top: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-radius: 0; border-top-left-radius: 100%; }
+  .room.pos-p2 .porta { right: auto; left: -12px; }
+  .room.pos-p2 .porta::before { left: 12px; bottom: 0; width: 28px; height: 2px; }
+  .room.pos-p2 .porta::after { left: 12px; bottom: 0; }
+  /* sala sem acesso: porta fechada */
+  .room.indisponivel .porta::after { display: none; }
+  .room.indisponivel .porta::before { transform-origin: 0 100%; transform: rotate(90deg); }
+  .room.pos-p1.indisponivel .porta::before { transform-origin: 100% 100%; transform: rotate(90deg); }
+  .room.pos-p2.indisponivel .porta::before { transform-origin: 0 100%; transform: rotate(-90deg); }
+
+  /* bloco da esquerda (x04–x06): porta no canto direito da parede do corredor */
+  .room.pos-a1 .porta, .room.pos-a2 .porta, .room.pos-a3 .porta { left: auto; right: 12px; }
+  .room.pos-a1 .porta::before, .room.pos-a2 .porta::before, .room.pos-a3 .porta::before { left: auto; right: 0; }
+  .room.pos-a1 .porta::after, .room.pos-a2 .porta::after, .room.pos-a3 .porta::after {
+    left: auto; right: 0; border-right: 0; border-left: 1px dashed rgba(50, 35, 20, .55);
+    border-top-right-radius: 0; border-top-left-radius: 100%;
+  }
+  .room.pos-a1.indisponivel .porta::before, .room.pos-a2.indisponivel .porta::before, .room.pos-a3.indisponivel .porta::before { transform-origin: 100% 100%; transform: rotate(-90deg); }
+
+  /* salas das pontas: janela na parede externa de baixo */
+  .room.pos-p1 .janela, .room.pos-p2 .janela {
+    top: auto; bottom: -16px; left: 20%; right: auto; width: 60%; height: 16px; border: 0;
+    border-left: 2px solid var(--parede-aresta); border-right: 2px solid var(--parede-aresta);
+    background: linear-gradient(180deg, transparent 6px, rgba(40, 60, 75, .6) 6px 7px, #c4d7e2 7px 9px, rgba(40, 60, 75, .6) 9px 10px, transparent 10px);
+  }
+
+  .pendencias { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .pendencias li { padding: 9px 12px; border-radius: 8px; font-weight: 500; }
+  .pendencias li.problema { background: var(--alugada-bg); color: var(--alugada); }
+  .pendencias li.atencao { background: var(--processo-bg); color: var(--processo); }
+
+  .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .grid-3 > .card { margin-bottom: 0; }
+  @media (max-width: 960px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; user-select: none; white-space: nowrap; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--surface-2); }
+  .table-wrap { overflow-x: auto; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge.alugada { background: var(--alugada-bg); color: var(--alugada); }
+  .badge.disponivel { background: var(--disponivel-bg); color: var(--disponivel); }
+  .badge.processo { background: var(--processo-bg); color: var(--processo); }
+  .badge.indisponivel { background: var(--indisponivel-bg); color: var(--indisponivel); }
+  .badge.res-fechou { background: var(--disponivel-bg); color: var(--disponivel); }
+  .badge.res-negociando { background: var(--processo-bg); color: var(--processo); }
+  .badge.res-naofechou { background: var(--alugada-bg); color: var(--alugada); }
+  .badge.res-aberto { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+  .muted { color: var(--muted); }
+
+  .bars { display: flex; align-items: flex-end; gap: 8px; height: 140px; padding-top: 10px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .bar { width: 100%; max-width: 36px; background: var(--accent); border-radius: 6px 6px 2px 2px; min-height: 2px; }
+  .bar-col .n { font-size: 12px; font-weight: 600; }
+  .bar-col .d { font-size: 11px; color: var(--muted); }
+
+  .rank { list-style: none; padding: 0; margin: 0; }
+  .rank li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .rank li:last-child { border-bottom: 0; }
+  .rank .pos { width: 22px; color: var(--muted); font-weight: 600; }
+  .rank .track { flex: 1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+  .rank .fill { height: 100%; background: var(--accent); }
+  .rank .cnt { width: 28px; text-align: right; font-weight: 600; }
+
+  /* Drawer */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .overlay.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: min(520px, 100%);
+    background: var(--surface); border-left: 1px solid var(--border); z-index: 11;
+    transform: translateX(100%); transition: transform .25s; overflow-y: auto; padding: 20px 22px;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer .close { float: right; border: 0; background: var(--surface-2); color: var(--text); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; }
+  .drawer h3 { margin: 0 0 4px; font-size: 20px; }
+  .drawer h4 { margin: 22px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .info div { background: var(--surface-2); border-radius: 8px; padding: 10px; }
+  .info .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .info .v { font-weight: 600; margin-top: 2px; }
+  .timeline { list-style: none; padding: 0; margin: 0; border-left: 2px solid var(--border); margin-left: 6px; }
+  .timeline li { position: relative; padding: 0 0 14px 16px; }
+  .timeline li::before { content: ""; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+  .timeline .when { font-size: 12px; color: var(--muted); }
+  .link { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .link:hover { text-decoration: underline; }
+  .steps { display: flex; gap: 4px; margin-top: 8px; }
+  .steps span { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); }
+  .steps span.on { background: var(--processo); }
+  .empty { color: var(--muted); padding: 16px 0; text-align: center; }
+  .hidden { display: none !important; }
+
+  /* Botões e formulários */
+  .btn {
+    font: inherit; font-size: 13px; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.danger { color: var(--alugada); margin-left: auto; }
+  .btn.danger.confirmar { background: var(--alugada); border-color: var(--alugada); color: #fff; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .form { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+  .form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .form input, .form select, .form textarea {
+    font: inherit; font-size: 14px; font-weight: 400; color: var(--text);
+    padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .form input:focus, .form select:focus, .form textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .form fieldset { border: 1px dashed var(--border); border-radius: 10px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; margin: 0; }
+  .form legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+  .form label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; font-size: 13px; color: var(--text);
+    background: var(--processo-bg); padding: 10px 12px; border-radius: 8px; }
+  .form-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .pend-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 6px; margin-bottom: 6px; }
+  .rodape { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; padding: 4px 0 24px; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    background: var(--text); color: var(--surface); padding: 10px 18px; border-radius: 8px; font-size: 13px;
+    transition: opacity .2s, transform .2s; z-index: 20;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  header .btn.primary { margin-left: 8px; }
+
+  /* =========================================================
+     V2 — a tela inteira é a prancha; o resto abre pelos botões
+     ========================================================= */
+  :root {
+    --surface: #fbfaf7; --surface-2: #f2efe9; --border: #e3ddd3;
+    --text: #24211d; --muted: #7c756b; --accent: #3d5a80;
+    --ui-vidro: rgba(26, 28, 32, .74); --ui-texto: #ece9e3; --ui-muted: #969289; --ui-linha: rgba(255, 255, 255, .14);
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  }
+  @media all { /* tema escuro: só com data-theme="dark" */
+    :root[data-theme="dark"] { --surface: #1d1f23; --surface-2: #26292e; --border: #35383e; --text: #ecebe7; --muted: #9c9890; --accent: #8fb0e0; }
+  }
+  body {
+    min-height: 100vh;
+    font-family: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      linear-gradient(rgba(255, 255, 255, .055) 1px, transparent 1px) 0 0 / 120px 120px,
+      linear-gradient(90deg, rgba(255, 255, 255, .055) 1px, transparent 1px) 0 0 / 120px 120px,
+      linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 24px 24px,
+      radial-gradient(ellipse at 50% 35%, #34373c, #1b1d20 70%);
+    background-attachment: fixed;
+  }
+  .rotulo-tecnico { font: 500 10px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--ui-muted); }
+
+  /* topo */
+  .topo {
+    position: sticky; top: 0; z-index: 6;
+    /* marca centralizada na tela, botão na direita */
+    display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px;
+    padding: 16px 32px 22px; border: 0; color: var(--ui-texto);
+    background: linear-gradient(rgba(22, 24, 27, .92) 55%, rgba(22, 24, 27, 0));
+  }
+  .marca { grid-column: 2; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+  /* margem negativa compensa o espaçamento depois da última letra, para centralizar de verdade */
+  .marca b { font-size: 17px; font-weight: 800; letter-spacing: .5em; margin-right: -.5em; }
+  .marca span { font: 500 10px/1 var(--mono); letter-spacing: .24em; margin-right: -.24em; text-transform: uppercase; color: var(--ui-muted); }
+  .topo .btn.primary { grid-column: 3; justify-self: end; margin: 0; padding: 9px 16px; border-radius: 10px; }
+
+  /* palco: as plantas ocupam a tela */
+  main.palco { max-width: none; padding: 0 32px 32px 116px; }
+  .floors { gap: 4px; max-width: 1700px; margin: 0 auto; }
+  .floor { background: none; border-radius: 0; padding: 4px 6px 44px; }
+  .floor-title { margin-bottom: 16px; }
+
+  /* filtros: controle segmentado centralizado abaixo da marca */
+  .filtros {
+    grid-column: 1 / -1; justify-self: center; min-width: 0; display: flex; gap: 2px; padding: 4px; margin-top: 4px;
+    border-radius: 999px; border: 1px solid var(--ui-linha); background: rgba(255, 255, 255, .04);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); max-width: 100%; overflow-x: auto;
+  }
+  .filtros .chip {
+    border: 0; background: transparent; color: var(--ui-muted); padding: 7px 14px; font-size: 12.5px; font-weight: 600;
+    white-space: nowrap; transition: background .15s, color .15s;
+  }
+  .filtros .chip b { font-weight: 600; opacity: .6; font-variant-numeric: tabular-nums; }
+  .filtros .chip:hover { color: var(--ui-texto); background: rgba(255, 255, 255, .06); }
+  .filtros .chip.active { color: #1d1f23; background: #f3f0ea; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+  .filtros .chip.active b { opacity: .5; }
+
+  /* rodapé da prancha: carimbo */
+  .rodape-prancha { display: flex; justify-content: center; max-width: 1700px; margin: 0 auto; padding: 0 6px; }
+  .dot.pendencia { background: transparent; border-radius: 2px; box-shadow: inset 0 0 0 2px var(--alugada); }
+  .carimbo {
+    display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); color: var(--ui-texto);
+    border: 1px solid var(--ui-linha); border-radius: 14px; background: rgba(255, 255, 255, .03);
+  }
+  .carimbo > div { padding: 14px 26px; text-align: center; }
+  .carimbo > div + div { border-left: 1px solid var(--ui-linha); }
+  .carimbo .k { font: 500 9.5px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--ui-muted); margin-bottom: 8px; }
+  .carimbo .v { font-size: 28px; font-weight: 700; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .carimbo .v small { font-size: 15px; font-weight: 500; color: var(--ui-muted); margin-left: 4px; }
+  .carimbo .v.desistiram { color: #f08a80; }
+
+  /* dock de botões */
+  .dock {
+    position: fixed; z-index: 8; left: 20px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 2px; padding: 8px;
+    background: var(--ui-vidro); border: 1px solid var(--ui-linha); border-radius: 16px;
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    box-shadow: 0 20px 50px -10px rgba(0, 0, 0, .6);
+  }
+  .dock button {
+    position: relative; width: 68px; padding: 10px 4px 8px; border: 0; border-radius: 11px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    background: transparent; color: var(--ui-muted); font: 600 10px/1.1 "Manrope", system-ui, sans-serif; letter-spacing: .02em;
+    transition: color .15s, background .15s;
+  }
+  .dock button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .dock button:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+  .dock button.active { color: #fff; background: rgba(255, 255, 255, .13); }
+  .dock button.active::before { content: ""; position: absolute; left: -8px; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: #fff; }
+  .dock .qtd {
+    position: absolute; top: 5px; right: 9px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+    background: var(--alugada); color: #fff; font: 700 9.5px/17px "Manrope", sans-serif; text-align: center;
+  }
+  .dock .qtd.neutra { background: rgba(255, 255, 255, .16); color: var(--ui-texto); }
+  .dock hr { border: 0; height: 1px; background: var(--ui-linha); margin: 4px 8px; }
+
+  /* painéis que expandem ao lado do dock */
+  .painel {
+    position: fixed; z-index: 7; left: 108px; top: 78px; bottom: 20px;
+    width: min(420px, calc(100vw - 128px)); overflow-y: auto;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 16px;
+    padding: 18px 22px 22px; box-shadow: 0 40px 80px -20px rgba(0, 0, 0, .7);
+    opacity: 0; transform: translateX(-14px) scale(.985); transform-origin: left center; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+  }
+  .painel.largo { width: min(1120px, calc(100vw - 128px)); }
+  .painel:not(.largo) { bottom: auto; max-height: calc(100vh - 98px); }
+  .painel.open { opacity: 1; transform: none; pointer-events: auto; }
+  .painel-head {
+    display: flex; align-items: center; gap: 12px; margin: -2px 0 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+    position: sticky; top: -18px; background: var(--surface); z-index: 1; padding-top: 4px;
+  }
+  .painel-head .rotulo-tecnico { color: var(--muted); padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; }
+  .painel-head h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+  .painel-head h2 .muted { font-weight: 400; font-size: 14px; }
+  .painel .fechar {
+    margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--surface-2); color: var(--text); font-size: 18px;
+  }
+  .painel .fechar:hover { background: var(--border); }
+  .painel .toolbar input, .painel .toolbar select { background: var(--surface-2); }
+  .painel table th { font-family: var(--mono); font-weight: 500; font-size: 10.5px; letter-spacing: .12em; }
+
+  /* detalhe da sala (direita) no mesmo tom de papel */
+  .drawer { box-shadow: -30px 0 60px -20px rgba(0, 0, 0, .5); }
+  .drawer h4 { font-family: var(--mono); font-weight: 500; font-size: 10.5px; letter-spacing: .18em; }
+  .drawer .info .k { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; }
+
+  /* etiqueta da sala na cor do status (tons um pouco mais fechados para o texto branco ler bem) */
+  .room.alugada { --placa-cor: #b8403a; }
+  .room.disponivel { --placa-cor: #1d8048; }
+  .room.processo { --placa-cor: #b06f0c; }
+  .room.indisponivel { --placa-cor: #5c616a; }
+  .room .tag {
+    background: linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 60%), color-mix(in srgb, var(--placa-cor) 94%, transparent);
+    color: #fff;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .25) inset, 0 8px 18px -6px rgba(0, 0, 0, .5), 0 0 0 1px rgba(0, 0, 0, .15);
+  }
+  .room .st { color: rgba(255, 255, 255, .92); }
+  .room .st::before { background: #fff; box-shadow: 0 0 0 3px rgba(255, 255, 255, .25); }
+  .room .vis, .room .who small { color: rgba(255, 255, 255, .78); }
+  .room .pend, .room .pend.problema, .room .pend.atencao { color: #fff; border-top-color: rgba(255, 255, 255, .25); font-weight: 600; }
+  .room:hover .tag { box-shadow: 0 1px 0 rgba(255, 255, 255, .25) inset, 0 14px 26px -8px rgba(0, 0, 0, .6), 0 0 0 2px #fff; }
+
+  /* botão de tema */
+  .tema {
+    grid-column: 1; grid-row: 1; justify-self: start; display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 12px 7px 10px; border-radius: 999px; cursor: pointer; font: 600 12px/1 "Manrope", system-ui, sans-serif;
+    color: var(--ui-texto); background: rgba(255, 255, 255, .05); border: 1px solid var(--ui-linha); transition: background .15s;
+  }
+  .tema:hover { background: rgba(255, 255, 255, .1); }
+  .tema svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .tema .sol, [data-theme="light"] .tema .lua { display: none; }
+  [data-theme="light"] .tema .sol { display: block; }
+
+  /* ===== TEMA CLARO: papel manteiga em vez de prancha grafite ===== */
+  :root[data-theme="light"] {
+    --ui-vidro: rgba(255, 255, 255, .8); --ui-texto: #2a251f; --ui-muted: #8a8276; --ui-linha: rgba(70, 55, 40, .15);
+  }
+  [data-theme="light"] body {
+    background:
+      linear-gradient(rgba(70, 55, 40, .07) 1px, transparent 1px) 0 0 / 120px 120px,
+      linear-gradient(90deg, rgba(70, 55, 40, .07) 1px, transparent 1px) 0 0 / 120px 120px,
+      linear-gradient(rgba(70, 55, 40, .035) 1px, transparent 1px) 0 0 / 24px 24px,
+      linear-gradient(90deg, rgba(70, 55, 40, .035) 1px, transparent 1px) 0 0 / 24px 24px,
+      radial-gradient(ellipse at 50% 30%, #fcfaf6, #e9e4da 80%);
+    background-attachment: fixed;
+  }
+  [data-theme="light"] .topo { background: linear-gradient(rgba(246, 243, 237, .95) 55%, rgba(246, 243, 237, 0)); }
+  [data-theme="light"] .tema { background: rgba(255, 255, 255, .6); }
+  [data-theme="light"] .tema:hover { background: #fff; }
+  [data-theme="light"] .floor-title { color: #3a332b; }
+  [data-theme="light"] .floor-title::after { background: rgba(70, 55, 40, .15); }
+  [data-theme="light"] .floor-title small { color: #8a8276; }
+  [data-theme="light"] .plan {
+    box-shadow:
+      0 0 0 1px var(--parede-aresta),
+      0 10px 0 var(--parede-face),
+      0 11px 0 var(--parede-aresta),
+      0 26px 34px -10px rgba(70, 45, 20, .35),
+      0 50px 70px -24px rgba(70, 45, 20, .25);
+  }
+  [data-theme="light"] .filtros { background: rgba(255, 255, 255, .6); }
+  [data-theme="light"] .filtros .chip:hover { background: rgba(70, 55, 40, .06); }
+  [data-theme="light"] .filtros .chip.active { color: #fff; background: #2a251f; box-shadow: 0 2px 8px rgba(40, 25, 10, .25); }
+  [data-theme="light"] .carimbo { background: rgba(255, 255, 255, .6); }
+  [data-theme="light"] .carimbo .v.desistiram { color: #c0443a; }
+  [data-theme="light"] .dock { box-shadow: 0 16px 40px -12px rgba(60, 40, 20, .3); }
+  [data-theme="light"] .dock button:hover { color: #2a251f; background: rgba(70, 55, 40, .06); }
+  [data-theme="light"] .dock button.active { color: #2a251f; background: rgba(70, 55, 40, .1); }
+  [data-theme="light"] .dock button.active::before { background: #2a251f; }
+  [data-theme="light"] .dock .qtd.neutra { background: rgba(70, 55, 40, .12); }
+  [data-theme="light"] .painel { box-shadow: 0 30px 70px -20px rgba(60, 40, 20, .35); }
+  [data-theme="light"] .drawer { box-shadow: -30px 0 60px -20px rgba(60, 40, 20, .3); }
+
+  /* ===== ZOOM DA MAQUETE ===== */
+  /* o visor rola para o lado quando a planta fica maior que a tela; na vertical quem rola é a página */
+  .visor { overflow-x: auto; overflow-y: hidden; touch-action: pan-x pan-y; cursor: grab; scrollbar-width: thin; }
+  .visor.arrastando { cursor: grabbing; user-select: none; }
+  .visor.arrastando .room { cursor: grabbing; }
+  .zoom-ctrl {
+    position: fixed; z-index: 8; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 2px; padding: 5px;
+    background: var(--ui-vidro); border: 1px solid var(--ui-linha); border-radius: 14px;
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 16px 40px -12px rgba(0, 0, 0, .5);
+  }
+  .zoom-ctrl button {
+    width: 42px; height: 38px; border: 0; border-radius: 9px; cursor: pointer; background: transparent;
+    color: var(--ui-texto); font: 500 20px/1 "Manrope", system-ui, sans-serif; transition: background .15s;
+  }
+  .zoom-ctrl button:hover { background: rgba(255, 255, 255, .1); }
+  .zoom-ctrl #zoom-nivel { height: 26px; font: 500 10.5px/1 var(--mono); color: var(--ui-muted); }
+  /* botão de mostrar/esconder as etiquetas das salas */
+  .zoom-ctrl .cards { display: grid; place-items: center; border-bottom: 1px solid var(--ui-linha); border-radius: 9px 9px 0 0; margin-bottom: 3px; }
+  .zoom-ctrl .cards svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .zoom-ctrl .cards .olho-fechado, .sem-cards .zoom-ctrl .cards .olho { display: none; }
+  .sem-cards .zoom-ctrl .cards .olho-fechado { display: block; }
+  .sem-cards .zoom-ctrl .cards { color: var(--accent); }
+  /* só a planta: esconde as etiquetas (a sala continua clicável) */
+  .sem-cards .room .tag { opacity: 0; transform: scale(.96); pointer-events: none; }
+
+  /* ===== BANHEIRO: no fundo da sala, piso de azulejo, vaso, pia e porta ===== */
+  .room { padding-top: 82px; }            /* a etiqueta começa abaixo do banheiro */
+  .room .banheiro {
+    position: absolute; z-index: 1; top: 11px; width: 48%; height: 58px;
+    background:
+      linear-gradient(rgba(120, 110, 95, .16) 1px, transparent 1px) 0 0 / 9px 9px,
+      linear-gradient(90deg, rgba(120, 110, 95, .16) 1px, transparent 1px) 0 0 / 9px 9px,
+      linear-gradient(180deg, #e9e5de, #f5f2ec);
+    border: 3px solid var(--parede); border-top: 0;
+    box-shadow: 0 3px 0 var(--parede-face), 0 4px 0 var(--parede-aresta), inset 0 8px 10px -6px rgba(40, 25, 10, .3), 0 6px 10px -4px rgba(40, 25, 10, .35);
+  }
+  .room .banheiro.esq { left: 4px; border-left: 0; }
+  .room .banheiro.dir { right: 4px; border-right: 0; }
+  /* porta na parede lateral livre do banheiro (a que dá para dentro da sala):
+     banheiro à esquerda = porta na lateral direita; banheiro à direita = porta na lateral esquerda */
+  .room .banheiro::before, .room .banheiro::after { content: ""; position: absolute; }
+  .room .banheiro::before { bottom: 6px; width: 3px; height: 16px; background: #ece8e1; }
+  .room .banheiro::after { bottom: 6px; width: 16px; height: 16px; border-bottom: 2px solid #3b332c; }
+  .room .banheiro.esq::before { right: -3px; }
+  .room .banheiro.esq::after {
+    left: calc(100% + 3px);
+    border-top: 1px dashed rgba(50, 35, 20, .55); border-right: 1px dashed rgba(50, 35, 20, .55); border-top-right-radius: 100%;
+  }
+  .room .banheiro.dir::before { left: -3px; }
+  .room .banheiro.dir::after {
+    right: calc(100% + 3px);
+    border-top: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-top-left-radius: 100%;
+  }
+  /* x05 e x06: porta na parede de baixo do banheiro, no canto direito */
+  .room.pos-a1 .banheiro::before, .room.pos-a2 .banheiro::before { top: auto; bottom: -3px; left: auto; right: 6px; width: 16px; height: 3px; }
+  .room.pos-a1 .banheiro::after, .room.pos-a2 .banheiro::after {
+    top: calc(100% + 3px); bottom: auto; left: auto; right: 6px; width: 16px; height: 16px; border: 0; border-radius: 0;
+    border-right: 2px solid #3b332c; border-left: 1px dashed rgba(50, 35, 20, .55); border-bottom: 1px dashed rgba(50, 35, 20, .55); border-bottom-left-radius: 100%;
+  }
+  /* louças (vista de cima) */
+  .banheiro i { position: absolute; display: block; background: #fff; border: 1px solid rgba(80, 70, 60, .45); box-shadow: 0 2px 3px rgba(40, 25, 10, .25); }
+  .banheiro .vaso { top: 6px; width: 12px; height: 16px; border-radius: 45% 45% 50% 50% / 30% 30% 70% 70%; }
+  .banheiro .vaso::before { content: ""; position: absolute; top: -6px; left: -3px; right: -3px; height: 5px; border-radius: 2px; background: #fff; border: 1px solid rgba(80, 70, 60, .45); }
+  .banheiro .vaso::after { content: ""; position: absolute; inset: 3px 2px 2px; border-radius: 50%; border: 1px solid rgba(80, 70, 60, .25); }
+  .banheiro .pia { top: 0; width: 20px; height: 13px; border-top: 0; border-radius: 0 0 9px 9px; }
+  .banheiro .pia::after { content: ""; position: absolute; inset: 2px 4px 3px; border-radius: 0 0 50% 50%; border: 1px solid rgba(80, 70, 60, .3); border-top: 0; }
+  .banheiro.esq .vaso { left: 8px; }
+  .banheiro.esq .pia { right: 28px; }
+  .banheiro.dir .vaso { right: 8px; }
+  .banheiro.dir .pia { left: 28px; }
+  [data-theme="light"] .zoom-ctrl { box-shadow: 0 16px 40px -12px rgba(60, 40, 20, .3); }
+  [data-theme="light"] .zoom-ctrl button:hover { background: rgba(70, 55, 40, .07); }
+
+  /* telas baixas (celular deitado): topo não fica preso e controles mais compactos */
+  @media (max-height: 520px) and (min-width: 761px) {
+    .topo { position: relative; padding: 10px 24px 12px; }
+    .filtros { margin-top: 0; }
+    main.palco { padding-left: 96px; padding-right: 20px; }
+    .dock { left: 12px; padding: 5px; }
+    .dock button { width: 60px; padding: 6px 2px 5px; gap: 3px; font-size: 9px; }
+    .dock button svg { width: 18px; height: 18px; }
+    .dock hr { margin: 2px 6px; }
+    .painel { left: 88px; top: 12px; bottom: 12px; }
+    .painel:not(.largo) { max-height: calc(100vh - 24px); }
+    .zoom-ctrl { right: 12px; bottom: 12px; }
+    .zoom-ctrl button { width: 36px; height: 30px; font-size: 17px; }
+    .zoom-ctrl #zoom-nivel { height: 22px; }
+  }
+
+  /* =========================================================
+     MOBILE — planta girada na vertical (101 em cima, 107 embaixo),
+     salas à esquerda, corredor à direita
+     ========================================================= */
+  @media (max-width: 760px) {
+    /* topo compacto */
+    .topo { padding: 12px 14px 14px; gap: 8px; }
+    .tema { padding: 8px; }
+    .tema span { display: none; }
+    .marca b { font-size: 14px; letter-spacing: .4em; margin-right: -.4em; }
+    .marca span { font-size: 8.5px; }
+    .topo .btn.primary { padding: 8px 12px; font-size: 12px; }
+    .so-desktop { display: none; }
+    .filtros { justify-self: stretch; margin-top: 8px; scrollbar-width: none; }
+    .filtros::-webkit-scrollbar { display: none; }
+    .filtros .chip { padding: 7px 11px; font-size: 12px; }
+
+    main.palco { padding: 0 14px 112px; }
+    .floor { padding: 4px 0 30px; overflow: visible; }
+    .floor-title { letter-spacing: .16em; margin-bottom: 12px; }
+
+    /* grade da planta na vertical */
+    .plan {
+      min-width: 0; height: auto; padding: 12px; gap: 10px;
+      grid-template-columns: 1fr 52px;
+      grid-template-rows: 150px 118px 118px 64px 118px 118px 118px 150px;
+    }
+    .room.pos-p2 { grid-column: 1 / 3; grid-row: 1; }
+    .room.pos-b2 { grid-column: 1; grid-row: 2; }
+    .room.pos-b1 { grid-column: 1; grid-row: 3; }
+    .plan .escada { grid-column: 1; grid-row: 4; }
+    .room.pos-a3 { grid-column: 1; grid-row: 5; }
+    .room.pos-a2 { grid-column: 1; grid-row: 6; }
+    .room.pos-a1 { grid-column: 1; grid-row: 7; }
+    .room.pos-p1 { grid-column: 1 / 3; grid-row: 8; }
+    .plan .corredor { grid-column: 2; grid-row: 2 / 8; padding: 10px 0 0; writing-mode: vertical-rl; letter-spacing: .4em; }
+
+    /* luz entrando pela janela de cada lado */
+    .room, .room.pos-p1, .room.pos-p2 {
+      background:
+        radial-gradient(60% 120% at var(--luz-pos, 0% 50%), var(--luz-janela), transparent 70%),
+        radial-gradient(ellipse at 50% 55%, transparent 50%, rgba(30, 15, 0, .16)),
+        linear-gradient(var(--escurecer), var(--escurecer)),
+        linear-gradient(var(--tinta), var(--tinta)),
+        var(--madeira) 0 0 / 96px 240px;
+    }
+    .room.pos-p2 { --luz-pos: 100% 50%; }
+    .room.pos-p1 { --luz-pos: 100% 50%; }
+
+    /* respiro interno da sala */
+    .room { padding: 16px 10px 10px; }
+    .room .tag { align-self: flex-start; width: calc(100% - 46px); }   /* deixa a faixa da porta à direita livre */
+
+    /* janelas: parede externa da esquerda; nas pontas, em cima / embaixo */
+    .room .janela {
+      top: 20%; left: -12px; width: 12px; height: 60%; border: 0;
+      border-top: 2px solid var(--parede-aresta); border-bottom: 2px solid var(--parede-aresta);
+      background: linear-gradient(90deg, transparent 4px, rgba(40, 60, 75, .6) 4px 5px, #c4d7e2 5px 7px, rgba(40, 60, 75, .6) 7px 8px, transparent 8px);
+    }
+    .room.pos-p1 .janela, .room.pos-p2 .janela {
+      top: -12px; bottom: auto; left: 25%; right: auto; width: 50%; height: 12px; border: 0;
+      border-left: 2px solid var(--parede-aresta); border-right: 2px solid var(--parede-aresta);
+      background: linear-gradient(180deg, transparent 4px, rgba(40, 60, 75, .6) 4px 5px, #c4d7e2 5px 7px, rgba(40, 60, 75, .6) 7px 8px, transparent 8px);
+    }
+    .room.pos-p1 .janela { top: auto; bottom: -12px; }
+
+    /* portas: salas do meio abrem para a direita (corredor) */
+    .room .porta { top: 12px; right: -10px; bottom: auto; left: auto; width: 10px; height: 28px; }
+    .room .porta::before { top: 0; right: 10px; bottom: auto; left: auto; width: 28px; height: 2px; }
+    .room .porta::after {
+      top: 0; right: 10px; bottom: auto; left: auto; width: 28px; height: 28px; border: 0; border-radius: 0;
+      border-bottom: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-bottom-left-radius: 100%;
+    }
+    /* ponta de cima (x01): porta na parede de baixo, do lado do corredor */
+    .room.pos-p2 .porta { top: auto; bottom: -10px; right: 16px; left: auto; width: 28px; height: 10px; }
+    .room.pos-p2 .porta::before { top: auto; bottom: 10px; left: 0; right: auto; width: 2px; height: 28px; }
+    .room.pos-p2 .porta::after {
+      top: auto; bottom: 10px; left: 0; right: auto; border: 0; border-radius: 0;
+      border-top: 1px dashed rgba(50, 35, 20, .55); border-right: 1px dashed rgba(50, 35, 20, .55); border-top-right-radius: 100%;
+    }
+    /* ponta de baixo (x07): porta na parede de cima */
+    .room.pos-p1 .porta { top: -10px; bottom: auto; right: 16px; left: auto; width: 28px; height: 10px; }
+    .room.pos-p1 .porta::before { top: 10px; bottom: auto; left: 0; right: auto; width: 2px; height: 28px; }
+    .room.pos-p1 .porta::after {
+      top: 10px; bottom: auto; left: 0; right: auto; border: 0; border-radius: 0;
+      border-bottom: 1px dashed rgba(50, 35, 20, .55); border-right: 1px dashed rgba(50, 35, 20, .55); border-bottom-right-radius: 100%;
+    }
+    /* porta fechada nas salas sem acesso */
+    .room.indisponivel .porta::before { transform-origin: 100% 0; transform: rotate(-90deg); }
+    .room.pos-p2.indisponivel .porta::before { transform-origin: 0 100%; transform: rotate(90deg); }
+    .room.pos-p1.indisponivel .porta::before { transform-origin: 0 0; transform: rotate(-90deg); }
+
+    /* bloco da esquerda (x04–x06): porta em cima na parede do corredor (= canto direito no desktop) */
+    .room.pos-a1 .porta, .room.pos-a2 .porta, .room.pos-a3 .porta { top: 12px; right: -10px; bottom: auto; left: auto; }
+    .room.pos-a1 .porta::before, .room.pos-a2 .porta::before, .room.pos-a3 .porta::before { top: 0; right: 10px; bottom: auto; left: auto; }
+    .room.pos-a1 .porta::after, .room.pos-a2 .porta::after, .room.pos-a3 .porta::after {
+      top: 0; right: 10px; bottom: auto; left: auto; border: 0; border-radius: 0;
+      border-bottom: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-bottom-left-radius: 100%;
+    }
+    .room.pos-a1.indisponivel .porta::before, .room.pos-a2.indisponivel .porta::before, .room.pos-a3.indisponivel .porta::before { transform-origin: 100% 0; transform: rotate(-90deg); }
+    /* bloco da direita (x02–x03): porta embaixo na parede do corredor (= canto esquerdo no desktop) */
+    .room.pos-b1 .porta, .room.pos-b2 .porta { top: auto; bottom: 12px; }
+    .room.pos-b1 .porta::before, .room.pos-b2 .porta::before { top: auto; bottom: 0; }
+    .room.pos-b1 .porta::after, .room.pos-b2 .porta::after {
+      top: auto; bottom: 0; border: 0; border-radius: 0;
+      border-top: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-top-left-radius: 100%;
+    }
+    .room.pos-b1.indisponivel .porta::before, .room.pos-b2.indisponivel .porta::before { transform-origin: 100% 100%; transform: rotate(90deg); }
+
+    /* salas das pontas: janela na parede externa da direita (= parede de baixo no desktop) */
+    .room.pos-p1 .janela, .room.pos-p2 .janela {
+      top: 25%; bottom: auto; left: auto; right: -12px; width: 12px; height: 50%; border: 0;
+      border-top: 2px solid var(--parede-aresta); border-bottom: 2px solid var(--parede-aresta);
+      background: linear-gradient(90deg, transparent 4px, rgba(40, 60, 75, .6) 4px 5px, #c4d7e2 5px 7px, rgba(40, 60, 75, .6) 7px 8px, transparent 8px);
+    }
+
+    /* escada deitada: degraus brancos na vertical, saída para o corredor à direita */
+    .plan .escada {
+      background:
+        linear-gradient(180deg, #cfc7ba 0 4px, rgba(175, 205, 220, .75) 4px 6px, transparent 6px calc(100% - 6px), rgba(175, 205, 220, .75) calc(100% - 6px) calc(100% - 4px), #cfc7ba calc(100% - 4px)),
+        linear-gradient(90deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 40%, rgba(60, 45, 30, .16)),
+        linear-gradient(180deg, rgba(60, 45, 30, .10), transparent 24%, transparent 76%, rgba(60, 45, 30, .10)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 1) 0 1px, transparent 1px 12px, rgba(70, 55, 40, .30) 12px 13px, rgba(70, 55, 40, .08) 13px 16px),
+        linear-gradient(180deg, #eeeae3, #fdfcfa 35%, #f6f3ee 65%, #eeeae3);
+    }
+    .plan .escada::after { top: 0; bottom: 0; left: auto; right: -10px; width: 10px; height: auto; }
+    .escada .corte { top: 0; bottom: 0; left: 26%; right: auto; width: 40px; height: auto; }
+    .escada .rotulo { writing-mode: horizontal-tb; top: 50%; left: 64%; padding: 4px 6px 4px 9px; }
+
+    /* números em 2 x 2 */
+    .carimbo { width: 100%; grid-template-columns: 1fr 1fr; }
+    .carimbo > div { padding: 12px 10px; }
+    .carimbo > div + div { border-left: 0; }
+    .carimbo > div:nth-child(even) { border-left: 1px solid var(--ui-linha); }
+    .carimbo > div:nth-child(n + 3) { border-top: 1px solid var(--ui-linha); }
+    .carimbo .v { font-size: 24px; }
+
+    /* dock vira barra inferior */
+    .dock { top: auto; bottom: 12px; left: 12px; right: 12px; transform: none; flex-direction: row; justify-content: space-around; padding: 6px; }
+    .dock button { width: auto; flex: 1; padding: 8px 2px 7px; }
+    .dock hr { display: none; }
+    .dock button.active::before { display: none; }
+    .painel, .painel.largo { left: 8px; right: 8px; width: auto; top: 10px; bottom: 92px; padding: 16px; }
+    .painel:not(.largo) { bottom: auto; max-height: calc(100vh - 102px); }
+    .painel .toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+    .painel .toolbar input[type=search] { grid-column: 1 / -1; min-width: 0; max-width: none; width: 100%; }
+    .painel .toolbar select { min-width: 0; }
+    .painel .toolbar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+    .painel .toolbar label input { width: 100%; min-width: 0; }
+    /* tabela rola para o lado em vez de espremer */
+    .painel table { min-width: 680px; }
+    .drawer { padding: 18px 16px; }
+    .zoom-ctrl { right: 12px; bottom: 92px; }
+    .zoom-ctrl button { width: 40px; height: 36px; }
+    .info { grid-template-columns: 1fr; }
+
+    /* banheiro na planta girada: fica encostado na parede da esquerda (o "fundo" da sala);
+       esq = embaixo à esquerda, dir = em cima à esquerda */
+    .room { padding: 16px 10px 10px 70px; }
+    .room .banheiro, .room .banheiro.esq, .room .banheiro.dir {
+      left: 4px; right: auto; width: 56px; height: 48%; border: 3px solid var(--parede); border-left: 0;
+      box-shadow: inset 8px 0 10px -6px rgba(40, 25, 10, .3), 4px 2px 10px -4px rgba(40, 25, 10, .35);
+    }
+    .room .banheiro.esq { top: auto; bottom: 0; border-bottom: 0; }
+    .room .banheiro.dir { top: 11px; bottom: auto; border-top: 0; box-shadow: 0 3px 0 var(--parede-face), inset 8px 0 10px -6px rgba(40, 25, 10, .3), 4px 2px 10px -4px rgba(40, 25, 10, .35); }
+    /* porta na lateral livre (girada): esq = parede de cima do banheiro, dir = parede de baixo; perto da direita */
+    .room .banheiro.esq::before, .room .banheiro.dir::before { left: auto; right: 6px; width: 16px; height: 3px; }
+    .room .banheiro.esq::before { top: -3px; bottom: auto; }
+    .room .banheiro.dir::before { top: auto; bottom: -3px; }
+    .room .banheiro.esq::after, .room .banheiro.dir::after {
+      left: auto; right: 6px; width: 16px; height: 16px; border: 0; border-radius: 0; border-right: 2px solid #3b332c;
+    }
+    .room .banheiro.esq::after {
+      top: auto; bottom: calc(100% + 3px);
+      border-top: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-top-left-radius: 100%;
+    }
+    .room .banheiro.dir::after {
+      top: calc(100% + 3px); bottom: auto;
+      border-bottom: 1px dashed rgba(50, 35, 20, .55); border-left: 1px dashed rgba(50, 35, 20, .55); border-bottom-left-radius: 100%;
+    }
+    /* louças giradas com a caixa/encosto voltados para a parede */
+    .banheiro .vaso, .banheiro .pia { transform: rotate(-90deg); }
+    .banheiro.esq .vaso, .banheiro.dir .vaso { left: 10px; right: auto; }
+    .banheiro.esq .pia, .banheiro.dir .pia { left: -3px; right: auto; }
+    .banheiro.esq .vaso { top: auto; bottom: 8px; }
+    .banheiro.esq .pia { top: 8px; }
+    .banheiro.dir .vaso { top: 8px; }
+    .banheiro.dir .pia { top: auto; bottom: 8px; }
+    /* x05 e x06: parede de baixo no desktop = parede da direita do banheiro na planta girada, perto do topo */
+    .room.pos-a1 .banheiro::before, .room.pos-a2 .banheiro::before { top: 6px; bottom: auto; left: auto; right: -3px; width: 3px; height: 16px; }
+    .room.pos-a1 .banheiro::after, .room.pos-a2 .banheiro::after {
+      top: 6px; bottom: auto; left: calc(100% + 3px); right: auto; width: 16px; height: 16px; border: 0; border-radius: 0;
+      border-top: 2px solid #3b332c; border-right: 1px dashed rgba(50, 35, 20, .55); border-bottom: 1px dashed rgba(50, 35, 20, .55); border-bottom-right-radius: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header class="topo">
+  <button class="tema" id="btn-tema" title="Alternar tema claro / escuro">
+    <svg class="lua" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+    <svg class="sol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+    <span id="btn-tema-txt"></span>
+  </button>
+  <div class="marca"><b>SIMÓVEL</b><span>Planta de ocupação</span></div>
+  <button class="btn primary" data-action="nova-visita">+ <span class="so-desktop">Registrar </span>visita</button>
+  <div class="filtros" role="group" aria-label="Filtrar salas">
+    <button class="chip active" data-status="todas">Todas <b data-count="todas"></b></button>
+    <button class="chip" data-status="disponivel"><span class="dot disponivel"></span>Disponível <b data-count="disponivel"></b></button>
+    <button class="chip" data-status="processo"><span class="dot processo"></span>Em processo <b data-count="processo"></b></button>
+    <button class="chip" data-status="alugada"><span class="dot alugada"></span>Alugada <b data-count="alugada"></b></button>
+    <button class="chip" data-status="indisponivel"><span class="dot indisponivel"></span>Não disponível <b data-count="indisponivel"></b></button>
+    <button class="chip" data-status="pendencia"><span class="dot pendencia"></span>Com pendência <b data-count="pendencia"></b></button>
+  </div>
+</header>
+
+<!-- BOTÕES QUE ABREM OS PAINÉIS -->
+<nav class="dock" aria-label="Painéis">
+  <button data-painel="pendencias" title="Pendências">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>
+    Pendências<span class="qtd" id="dock-pend"></span>
+  </button>
+  <hr>
+  <button data-painel="visitas" title="Histórico de visitas">
+    <svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg>
+    Visitas<span class="qtd neutra" id="dock-visitas"></span>
+  </button>
+  <button data-painel="visitantes" title="Visitantes">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20c.8-3.6 3.3-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 5.2a3.4 3.4 0 0 1 0 6.6M18 14.8c1.9.7 3 2.4 3.5 5.2"/></svg>
+    Visitantes<span class="qtd neutra" id="dock-pessoas"></span>
+  </button>
+  <hr>
+  <button data-painel="backup" title="Backup dos dados">
+    <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+    Backup
+  </button>
+</nav>
+
+<main class="palco">
+  <div class="visor" id="visor">
+    <div id="floors" class="floors"></div>
+  </div>
+
+  <div class="rodape-prancha">
+
+    <!-- números principais -->
+    <div class="carimbo">
+      <div><div class="k">Salas alugadas</div><div class="v" id="resumo"></div></div>
+      <div><div class="k">Visitas</div><div class="v" id="kpi-visitas"></div></div>
+      <div><div class="k">Pessoas</div><div class="v" id="kpi-pessoas"></div></div>
+      <div id="kpi-desistiram-box"><div class="k">Desistiram</div><div class="v desistiram" id="kpi-desistiram"></div></div>
+    </div>
+  </div>
+</main>
+
+<!-- PAINÉIS -->
+<section class="painel" id="painel-pendencias">
+  <div class="painel-head"><span class="rotulo-tecnico">01</span><h2>Pendências</h2><button class="fechar" data-fechar-painel>×</button></div>
+  <ul class="pend-list" id="pend-list"></ul>
+</section>
+
+
+<section class="painel largo" id="painel-visitas">
+    <div>
+      <div class="painel-head"><span class="rotulo-tecnico">02</span><h2>Histórico de visitas <span class="muted" id="visits-count"></span></h2><button class="fechar" data-fechar-painel>×</button></div>
+      <div class="toolbar">
+        <input type="search" id="visit-search" placeholder="Buscar visitante, sala, observação…">
+        <select id="visit-room"><option value="">Todas as salas</option></select>
+        <select id="visit-result">
+          <option value="">Qualquer resultado</option>
+          <option value="fechou">Fechou</option>
+          <option value="negociando">Em negociação</option>
+          <option value="aberto">Em aberto</option>
+          <option value="naofechou">Não fechou</option>
+        </select>
+        <label class="muted">De <input type="date" id="visit-from"></label>
+        <label class="muted">Até <input type="date" id="visit-to"></label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th data-sort="data">Data ↓</th>
+            <th data-sort="sala">Sala de interesse</th>
+            <th data-sort="visitante">Visitante</th>
+            <th data-sort="vez">Visita nº</th>
+            <th data-sort="resultado">Resultado</th>
+            <th>Observação</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="visits-body"></tbody>
+        </table>
+      </div>
+    </div>
+</section>
+
+<section class="painel largo" id="painel-visitantes">
+    <div>
+      <div class="painel-head"><span class="rotulo-tecnico">03</span><h2>Visitantes <span class="muted" id="people-count"></span></h2><button class="fechar" data-fechar-painel>×</button></div>
+      <div class="toolbar">
+        <input type="search" id="people-search" placeholder="Buscar nome, telefone, ramo…">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Nome</th>
+            <th>Telefone</th>
+            <th>Ramo</th>
+            <th>Total de visitas</th>
+            <th>Salas de interesse</th>
+            <th>Primeira visita</th>
+            <th>Última visita</th>
+          </tr></thead>
+          <tbody id="people-body"></tbody>
+        </table>
+      </div>
+    </div>
+</section>
+
+<section class="painel" id="painel-backup">
+  <div class="painel-head"><span class="rotulo-tecnico">04</span><h2>Backup</h2><button class="fechar" data-fechar-painel>×</button></div>
+  <p class="muted">Os dados ficam salvos neste navegador. Exporte de vez em quando para não perder nada, ou para levar para outro computador.</p>
+  <div class="actions">
+    <button class="btn primary" data-action="exportar">⬇ Exportar backup</button>
+    <button class="btn" data-action="importar">⬆ Importar backup</button>
+  </div>
+  <input type="file" id="arquivo-backup" accept="application/json,.json" hidden>
+</section>
+<!-- zoom da maquete -->
+<div class="zoom-ctrl" role="group" aria-label="Zoom da planta">
+  <button class="cards" id="btn-cards" title="Mostrar / esconder as etiquetas das salas" aria-pressed="false">
+    <svg class="olho" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+    <svg class="olho-fechado" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+  </button>
+  <button data-zoom="in" title="Aproximar (ou Ctrl + roda do mouse / pinça)">+</button>
+  <button data-zoom="reset" id="zoom-nivel" title="Voltar ao tamanho original">100%</button>
+  <button data-zoom="out" title="Afastar">−</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer"></aside>
+
+<script>
+/* =========================================================
+   DADOS REAIS
+   ========================================================= */
+
+const STATUS_LABEL = { alugada: 'Alugada', disponivel: 'Disponível', processo: 'Em processo', indisponivel: 'Não disponível' };
+const RESULTADO_LABEL = { fechou: 'Fechou', negociando: 'Em negociação', aberto: 'Em aberto', naofechou: 'Não fechou' };
+const AREA_SALA = 43; // todas as salas têm 43 m²
+
+// Posição de cada sala na planta (igual nos 2 andares), numeradas da direita para a esquerda:
+// x01 = ponta direita, x02-x03 = bloco de 2, x04-x06 = bloco de 3, x07 = ponta esquerda
+const POSICOES = ['p2', 'b2', 'b1', 'a3', 'a2', 'a1', 'p1'];
+// Banheiro no fundo de cada sala: no canto esquerdo (x01, x04-x06) ou no direito (x02, x03, x07).
+// Banheiros vizinhos ficam encostados, dividindo a mesma parede.
+const BANHEIRO_ESQ = ['p2', 'a1', 'a2', 'a3'];
+
+// Situação de cada sala. Salas que não aparecem aqui são consideradas disponíveis.
+// status: alugada | processo | indisponivel  (indisponivel aceita "motivo")
+// alertas: pendências da sala — nivel 'problema' (🟥) ou 'atencao' (⚠️)
+const SITUACAO = {
+  101: { status: 'alugada',  pessoa: 3 },   // Daniel Michael
+  102: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Porta não fecha' }] },
+  103: { status: 'processo', pessoa: 1 },   // Sthella Regina
+  104: { status: 'processo', pessoa: 5 },   // Wesleany
+  105: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Piso oco quebrado' }] },
+  107: { status: 'alugada', inquilino: 'Sem nome', ramo: 'Contabilidade' },   // inquilino sem visita registrada: use inquilino/ramo direto
+  201: { status: 'indisponivel', motivo: 'Sem chaves' },
+  202: { status: 'disponivel', alertas: [{ nivel: 'atencao', texto: 'Monitoramento — sala com um computador para as câmeras' }] },
+  203: { status: 'indisponivel', motivo: 'Sem chaves' },
+  205: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Porta não abre' }] },
+  206: { status: 'disponivel', alertas: [{ nivel: 'atencao', texto: 'Depósito — sala com várias caixas' }] },
+  207: { status: 'alugada',  pessoa: 4 },   // Jessyca
+};
+const ALERTA_ICONE = { problema: '🟥', atencao: '⚠️' };
+
+const VISITANTES_INICIAIS = [
+  { id: 1, nome: 'Sthella Regina',       telefone: '(61) 9167-5143',  ramo: 'Estética' },
+  { id: 2, nome: 'Simone Kátia',         telefone: '9515-1556',       ramo: 'Imobiliária' },
+  { id: 3, nome: 'Daniel Michael',       telefone: '9249-3797',       ramo: 'Escritório pessoal' },
+  { id: 4, nome: 'Jessyca',              telefone: '(61) 98307-7026', ramo: 'Treinadora física' },
+  { id: 5, nome: 'Wesleany',             telefone: '(61) 9338-9706',  ramo: 'Consultório médico' },
+];
+
+const VISITAS_RAW = [
+  { data: '2026-07-15', sala: 103, pessoa: 1, resultado: 'negociando', obs: 'Foram mostradas as salas; gostou da 103 para estética.' },
+  { data: '2026-07-28', sala: 104, pessoa: 2, resultado: 'naofechou',  obs: 'Gostou da 104 para a imobiliária, mas no fim não fechou.' },
+  { data: '2026-08-01', sala: 103, pessoa: 1, resultado: 'negociando', obs: 'Voltou com um vigilante para avaliar a sala.' },
+  { data: '2026-09-16', sala: 101, pessoa: 3, resultado: 'fechou',     obs: 'Escritório pessoal. Fechou e alugou a sala.' },
+  { data: '2026-09-21', sala: 207, pessoa: 4, resultado: 'fechou',     obs: 'Treinadora física. Gostou e ficou com a sala.' },
+  { data: '2026-10-19', sala: 103, pessoa: 1, resultado: 'negociando', obs: 'Visita com arquitetura para ver a sala.' },
+  { data: '2026-10-20', sala: 104, pessoa: 5, resultado: 'negociando', obs: 'Gostou da 104 para consultório médico.' },
+];
+
+/* =========================================================
+   ARMAZENAMENTO
+   Os dados acima são só o ponto de partida. Depois de qualquer
+   alteração pela tela, tudo fica salvo no navegador (localStorage).
+   ========================================================= */
+const STORAGE_KEY = 'simovel-dados-v1';
+const DADOS_INICIAIS = {
+  situacao: SITUACAO,
+  visitantes: VISITANTES_INICIAIS,
+  visitas: VISITAS_RAW.map((v, i) => ({ id: i + 1, ...v })),
+};
+let dados = carregar();
+
+function carregar() {
+  try {
+    const salvo = localStorage.getItem(STORAGE_KEY);
+    if (salvo) return JSON.parse(salvo);
+  } catch (e) { /* sem acesso ao armazenamento: usa os dados iniciais */ }
+  return JSON.parse(JSON.stringify(DADOS_INICIAIS));
+}
+function salvar() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(dados)); } catch (e) { }
+  montar();
+  renderTudo();
+}
+
+// estruturas usadas pela tela, recalculadas a partir de "dados"
+let salas = [], visitantes = [], visitas = [];
+function montar() {
+  visitantes = dados.visitantes;
+  salas = [];
+  for (let andar = 1; andar <= 2; andar++) {
+    for (let n = 1; n <= 7; n++) {
+      const numero = andar * 100 + n;
+      const sit = dados.situacao[numero] || { status: 'disponivel' };
+      salas.push({ id: numero, nome: `Sala ${numero}`, andar, pos: POSICOES[n - 1], area: AREA_SALA, alertas: [], ...sit });
+    }
+  }
+  visitas = dados.visitas.map(v => ({
+    id: v.id,
+    salaId: v.sala,
+    visitanteId: v.pessoa,
+    data: new Date(v.data + 'T12:00'),
+    resultado: v.resultado,
+    obs: v.obs || '',
+  })).sort((a, b) => a.data - b.data || a.id - b.id);
+  // numera "nª vez que este visitante veio por esta sala"
+  const contador = {};
+  visitas.forEach(v => {
+    const k = v.salaId + '-' + v.visitanteId;
+    contador[k] = (contador[k] || 0) + 1;
+    v.vez = contador[k];
+  });
+  visitas.reverse();
+}
+montar();
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const hoje = new Date();
+const salaById = id => salas.find(s => s.id === id);
+const pessoaById = id => visitantes.find(p => p.id === id);
+const fmtData = d => d.toLocaleDateString('pt-BR');
+function diasAtras(d) {
+  const n = Math.floor((new Date(hoje.toDateString()) - new Date(d.toDateString())) / 86400000);
+  return n === 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`;
+}
+const visitasDaSala = id => visitas.filter(v => v.salaId === id);
+const visitasDaPessoa = id => visitas.filter(v => v.visitanteId === id);
+const badgeResultado = r => `<span class="badge res-${r}">${RESULTADO_LABEL[r]}</span>`;
+function descricaoSala(s) {
+  if (s.pessoa) { const p = pessoaById(s.pessoa); return `${p.nome} · ${p.ramo}`; }
+  if (s.inquilino || s.ramo) return [s.inquilino, s.ramo].filter(Boolean).join(' · ');
+  if (s.motivo) return s.motivo;
+  return '';
+}
+const textoAlertas = s => s.alertas.map(a => `${ALERTA_ICONE[a.nivel]} ${a.texto}`).join(' · ');
+
+/* =========================================================
+   RESUMO + CONTADORES DOS FILTROS
+   ========================================================= */
+function renderResumo() {
+  const c = { todas: salas.length, alugada: 0, disponivel: 0, processo: 0, indisponivel: 0 };
+  salas.forEach(s => c[s.status]++);
+  c.pendencia = salas.filter(s => s.alertas.length).length;
+  $$('[data-count]').forEach(el => { el.textContent = c[el.dataset.count]; });
+  $('#resumo').innerHTML = `${c.alugada}<small>de ${salas.length}</small>`;
+  $('#dock-visitas').textContent = visitas.length;
+  $('#dock-pessoas').textContent = visitantes.length;
+
+  $('#kpi-visitas').textContent = visitas.length;
+  $('#kpi-pessoas').textContent = new Set(visitas.map(v => v.visitanteId)).size;
+
+  // desistiu = a visita mais recente da pessoa terminou em "não fechou" (visitas já está do mais novo para o mais antigo)
+  const desistiram = visitantes.filter(p => visitasDaPessoa(p.id)[0]?.resultado === 'naofechou');
+  $('#kpi-desistiram').textContent = desistiram.length;
+  $('#kpi-desistiram-box').title = desistiram.length ? desistiram.map(p => p.nome).join(', ') : 'Ninguém desistiu';
+}
+
+/* =========================================================
+   MAPA DE SALAS
+   ========================================================= */
+let filtroStatus = 'todas';
+function cartaoSala(s, match) {
+  const vs = visitasDaSala(s.id);
+  const alertas = textoAlertas(s);
+  let who = '';
+  if (s.pessoa) {
+    const p = pessoaById(s.pessoa);
+    who = `<div class="who">${p.nome}<small>${p.ramo}</small></div>`;
+  } else if (s.motivo) {
+    who = `<div class="who">${s.motivo}</div>`;
+  } else if (s.inquilino || s.ramo) {
+    who = `<div class="who">${s.inquilino || s.ramo}${s.inquilino && s.ramo ? `<small>${s.ramo}</small>` : ''}</div>`;
+  }
+  const pend = s.alertas.map(a => `<div class="pend ${a.nivel}">${ALERTA_ICONE[a.nivel]} ${a.texto}</div>`).join('');
+  return `
+    <button class="room pos-${s.pos} ${s.status} ${match ? '' : 'dim'}" data-sala="${s.id}"
+      title="${s.nome} · ${STATUS_LABEL[s.status]}${descricaoSala(s) ? ' · ' + descricaoSala(s) : ''}${alertas ? ' · ' + alertas : ''}">
+      <span class="janela"></span><span class="porta"></span>
+      <span class="banheiro ${BANHEIRO_ESQ.includes(s.pos) ? 'esq' : 'dir'}"><i class="vaso"></i><i class="pia"></i></span>
+      <div class="tag">
+        <div class="top">
+          <span class="num">${s.id}</span>
+          ${vs.length ? `<span class="vis" title="${vs.length} visita(s) com interesse nesta sala, última ${diasAtras(vs[0].data)}">⭐ ${vs.length}</span>` : ''}
+        </div>
+        <span class="st">${STATUS_LABEL[s.status]}</span>
+        ${who}
+        ${pend}
+      </div>
+    </button>`;
+}
+
+function renderMapa() {
+  // andar mais alto em cima, 1º embaixo (como num corte do prédio)
+  const andares = [...new Set(salas.map(s => s.andar))].sort((a, b) => b - a);
+  $('#floors').innerHTML = andares.map(andar => `
+    <div class="floor">
+      <div class="floor-title">${andar}º pavimento <small>${salas.filter(s => s.andar === andar).length} salas · ${AREA_SALA} m² cada</small></div>
+      <div class="plan">
+        <div class="corredor">Corredor</div>
+        <div class="escada" title="Escada"><span class="corte"></span><span class="rotulo">Escada</span></div>
+        ${salas.filter(s => s.andar === andar).map(s => {
+          const okStatus = filtroStatus === 'todas' || s.status === filtroStatus || (filtroStatus === 'pendencia' && s.alertas.length);
+          return cartaoSala(s, okStatus);
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPendencias() {
+  const itens = salas.flatMap(s => [
+    ...(s.status === 'indisponivel' ? [{ s, icone: '⬛', texto: `Não disponível — ${s.motivo || 'motivo não informado'}`, ordem: 0 }] : []),
+    ...s.alertas.map(a => ({ s, icone: ALERTA_ICONE[a.nivel], texto: a.texto, ordem: a.nivel === 'problema' ? 1 : 2 })),
+  ]).sort((a, b) => a.ordem - b.ordem || a.s.id - b.s.id);
+  $('#dock-pend').textContent = itens.length || '';
+  $('#dock-pend').classList.toggle('hidden', !itens.length);
+  $('#pend-list').innerHTML = itens.length ? itens.map(i => `
+    <li data-sala="${i.s.id}"><span>${i.icone}</span><span class="sala">${i.s.id}</span><span>${i.texto}</span></li>`).join('')
+    : '<li class="empty">Nenhuma pendência 🎉</li>';
+}
+
+
+/* =========================================================
+   TABELA DE VISITAS
+   ========================================================= */
+let sortVisitas = { key: 'data', dir: -1 };
+function renderVisitas() {
+  const q = $('#visit-search').value.trim().toLowerCase();
+  const sala = $('#visit-room').value;
+  const res = $('#visit-result').value;
+  const de = $('#visit-from').value ? new Date($('#visit-from').value + 'T00:00') : null;
+  const ate = $('#visit-to').value ? new Date($('#visit-to').value + 'T23:59') : null;
+
+  let rows = visitas.filter(v => {
+    const s = salaById(v.salaId), p = pessoaById(v.visitanteId);
+    if (sala && v.salaId !== +sala) return false;
+    if (res && v.resultado !== res) return false;
+    if (de && v.data < de) return false;
+    if (ate && v.data > ate) return false;
+    if (q && ![s.nome, p.nome, p.telefone, p.ramo, v.obs].some(t => t.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  const val = {
+    data: v => v.data,
+    sala: v => v.salaId,
+    visitante: v => pessoaById(v.visitanteId).nome,
+    vez: v => v.vez,
+    resultado: v => ({ fechou: 4, negociando: 3, aberto: 2, naofechou: 1 })[v.resultado],
+  }[sortVisitas.key];
+  rows.sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortVisitas.dir);
+
+  $('#visits-count').textContent = `(${rows.length})`;
+  $('#visits-body').innerHTML = rows.length ? rows.map(v => {
+    const s = salaById(v.salaId), p = pessoaById(v.visitanteId);
+    return `<tr data-pessoa="${p.id}">
+      <td>${fmtData(v.data)}<div class="muted" style="font-size:12px">${diasAtras(v.data)}</div></td>
+      <td><a class="link" data-sala="${s.id}">${s.nome}</a></td>
+      <td>${p.nome}<div class="muted" style="font-size:12px">${p.ramo}</div></td>
+      <td>${v.vez}ª</td>
+      <td>${badgeResultado(v.resultado)}</td>
+      <td class="muted">${v.obs}</td>
+      <td><button class="btn small" data-action="editar-visita" data-id="${v.id}">Editar</button></td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="7" class="empty">Nenhuma visita encontrada</td></tr>`;
+
+  $$('#painel-visitas th[data-sort]').forEach(th => {
+    th.textContent = th.textContent.replace(/ [↑↓]$/, '') + (th.dataset.sort === sortVisitas.key ? (sortVisitas.dir < 0 ? ' ↓' : ' ↑') : '');
+  });
+}
+
+/* =========================================================
+   TABELA DE VISITANTES
+   ========================================================= */
+function renderPessoas() {
+  const q = $('#people-search').value.trim().toLowerCase();
+  const rows = visitantes
+    .map(p => ({ p, vs: visitasDaPessoa(p.id) }))
+    .filter(x => !q || [x.p.nome, x.p.telefone, x.p.ramo].some(t => t.toLowerCase().includes(q)))
+    .sort((a, b) => b.vs.length - a.vs.length);
+  $('#people-count').textContent = `(${rows.length})`;
+  $('#people-body').innerHTML = rows.map(({ p, vs }) => {
+    const salasV = [...new Set(vs.map(v => v.salaId))].map(salaById);
+    return `<tr data-pessoa="${p.id}">
+      <td><strong>${p.nome}</strong></td>
+      <td>${p.telefone}</td>
+      <td>${p.ramo}</td>
+      <td><strong>${vs.length}</strong></td>
+      <td>${salasV.map(s => `<a class="link" data-sala="${s.id}">${s.nome}</a>`).join(', ') || '—'}</td>
+      <td>${vs.length ? fmtData(vs[vs.length - 1].data) : '—'}</td>
+      <td>${vs.length ? `${fmtData(vs[0].data)} <span class="muted">(${diasAtras(vs[0].data)})</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* =========================================================
+   DRAWER — detalhes da sala / visitante
+   ========================================================= */
+function abrirDrawer(html) {
+  $('#drawer').innerHTML = `<button class="close" id="close-drawer">×</button>` + html;
+  $('#drawer').classList.add('open');
+  $('#overlay').classList.add('open');
+  $('#drawer').scrollTop = 0;
+}
+function fecharDrawer() {
+  $('#drawer').classList.remove('open');
+  $('#overlay').classList.remove('open');
+}
+
+function detalheSala(id) {
+  const s = salaById(id);
+  const vs = visitasDaSala(id);
+  const porPessoa = {};
+  vs.forEach(v => (porPessoa[v.visitanteId] ||= []).push(v));
+  const pessoas = Object.entries(porPessoa).sort((a, b) => b[1].length - a[1].length);
+
+  let extra = '';
+  if (s.pessoa) {
+    const p = pessoaById(s.pessoa);
+    const rotulo = s.status === 'alugada' ? 'Inquilino' : 'Em negociação com';
+    extra = `<div><div class="k">${rotulo}</div><div class="v"><a class="link" data-pessoa="${p.id}">${p.nome}</a></div></div>
+             <div><div class="k">Ramo</div><div class="v">${p.ramo}</div></div>`;
+  } else if (s.motivo) {
+    extra = `<div style="grid-column: span 2"><div class="k">Motivo</div><div class="v">${s.motivo}</div></div>`;
+  } else if (s.status === 'alugada') {
+    extra = `<div><div class="k">Inquilino</div><div class="v ${s.inquilino ? '' : 'muted'}">${s.inquilino || 'Não informado'}</div></div>
+             <div><div class="k">Ramo</div><div class="v">${s.ramo || '—'}</div></div>`;
+  }
+  const pendencias = s.alertas.length ? `
+    <h4>Pendências</h4>
+    <ul class="pendencias">${s.alertas.map(a => `<li class="${a.nivel}">${ALERTA_ICONE[a.nivel]} ${a.texto}</li>`).join('')}</ul>` : '';
+
+  abrirDrawer(`
+    <h3>${s.nome}</h3>
+    <span class="badge ${s.status}">${STATUS_LABEL[s.status]}</span>
+    <div class="actions">
+      <button class="btn primary" data-action="editar-sala" data-id="${s.id}">✏️ Editar sala</button>
+      <button class="btn" data-action="nova-visita" data-sala-id="${s.id}">+ Registrar visita</button>
+    </div>
+    <div class="info">
+      <div><div class="k">Andar</div><div class="v">${s.andar}º</div></div>
+      <div><div class="k">Área</div><div class="v">${s.area} m²</div></div>
+      ${extra}
+      <div><div class="k">Visitas com interesse</div><div class="v">${vs.length}</div></div>
+      <div><div class="k">Último interesse</div><div class="v">${vs[0] ? `${fmtData(vs[0].data)} (${diasAtras(vs[0].data)})` : '—'}</div></div>
+    </div>
+    ${pendencias}
+
+    <h4>Interessados (${pessoas.length})</h4>
+    ${pessoas.length ? `<table><thead><tr><th>Visitante</th><th>Vezes</th><th>Última</th></tr></thead><tbody>
+      ${pessoas.map(([pid, lista]) => `<tr data-pessoa="${pid}">
+        <td>${pessoaById(+pid).nome}<div class="muted" style="font-size:12px">${pessoaById(+pid).ramo}</div></td>
+        <td><strong>${lista.length}×</strong></td><td>${fmtData(lista[0].data)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Ninguém demonstrou interesse ainda</div>'}
+
+    <h4>Linha do tempo</h4>
+    ${vs.length ? `<ul class="timeline">${vs.map(v => `
+      <li>
+        <div><a class="link" data-pessoa="${v.visitanteId}">${pessoaById(v.visitanteId).nome}</a> ${badgeResultado(v.resultado)}</div>
+        <div class="when">${fmtData(v.data)} · ${v.vez}ª visita · <a class="link" data-action="editar-visita" data-id="${v.id}">editar</a></div>
+        <div class="muted">${v.obs}</div>
+      </li>`).join('')}</ul>` : '<div class="empty">—</div>'}
+  `);
+}
+
+function detalhePessoa(id) {
+  const p = pessoaById(id);
+  const vs = visitasDaPessoa(id);
+  const porSala = {};
+  vs.forEach(v => (porSala[v.salaId] ||= []).push(v));
+  abrirDrawer(`
+    <h3>${p.nome}</h3>
+    <div class="muted">${p.telefone || 'sem telefone'} · ${p.ramo || 'ramo não informado'}</div>
+    <div class="actions">
+      <button class="btn primary" data-action="nova-visita" data-pessoa-id="${p.id}">+ Registrar visita</button>
+      <button class="btn" data-action="editar-pessoa" data-id="${p.id}">✏️ Editar contato</button>
+    </div>
+    <div class="info">
+      <div><div class="k">Total de visitas</div><div class="v">${vs.length}</div></div>
+      <div><div class="k">Salas de interesse</div><div class="v">${Object.keys(porSala).length}</div></div>
+      <div><div class="k">Primeira visita</div><div class="v">${vs.length ? fmtData(vs[vs.length - 1].data) : '—'}</div></div>
+      <div><div class="k">Última visita</div><div class="v">${vs.length ? `${fmtData(vs[0].data)} (${diasAtras(vs[0].data)})` : '—'}</div></div>
+    </div>
+
+    <h4>Salas de interesse</h4>
+    <table><thead><tr><th>Sala</th><th>Status</th><th>Vezes</th><th>Última</th></tr></thead><tbody>
+      ${Object.entries(porSala).sort((a, b) => b[1].length - a[1].length).map(([sid, lista]) => {
+        const s = salaById(+sid);
+        return `<tr data-sala="${s.id}"><td>${s.nome}</td><td><span class="badge ${s.status}">${STATUS_LABEL[s.status]}</span></td>
+          <td><strong>${lista.length}×</strong></td><td>${fmtData(lista[0].data)}</td></tr>`;
+      }).join('')}
+    </tbody></table>
+
+    <h4>Linha do tempo</h4>
+    <ul class="timeline">${vs.map(v => `
+      <li>
+        <div><a class="link" data-sala="${v.salaId}">${salaById(v.salaId).nome}</a> ${badgeResultado(v.resultado)}</div>
+        <div class="when">${fmtData(v.data)} · ${diasAtras(v.data)} · <a class="link" data-action="editar-visita" data-id="${v.id}">editar</a></div>
+        <div class="muted">${v.obs}</div>
+      </li>`).join('')}</ul>
+  `);
+}
+
+/* =========================================================
+   FORMULÁRIOS
+   ========================================================= */
+// remove caracteres que quebrariam o HTML
+const limpa = s => (s || '').replace(/[<>"]/g, '').trim();
+const opcoes = (lista, sel) => lista.map(([v, t]) => `<option value="${v}" ${String(v) === String(sel) ? 'selected' : ''}>${t}</option>`).join('');
+const proximoId = lista => Math.max(0, ...lista.map(x => x.id)) + 1;
+const hojeISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const isoData = d => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+// ---------- Visita ----------
+function formVisita({ id, salaId, pessoaId } = {}) {
+  const v = id ? visitas.find(x => x.id === id) : null;
+  const sala = v ? v.salaId : salaId || '';
+  const pessoa = v ? v.visitanteId : pessoaId || '';
+  abrirDrawer(`
+    <h3>${v ? 'Editar visita' : 'Registrar visita'}</h3>
+    <form class="form" id="form-visita" data-id="${v ? v.id : ''}">
+      <label>Data<input type="date" name="data" required value="${v ? isoData(v.data) : hojeISO()}"></label>
+
+      <label>Cliente
+        <select name="pessoa" required>
+          <option value="">Selecione…</option>
+          <option value="nova">+ Novo cliente</option>
+          ${opcoes(visitantes.map(p => [p.id, p.nome + (p.ramo ? ' — ' + p.ramo : '')]), pessoa)}
+        </select>
+      </label>
+      <fieldset class="novo-cliente hidden">
+        <legend>Novo cliente</legend>
+        <label>Nome<input name="nome" placeholder="Nome do cliente"></label>
+        <label>Telefone<input name="telefone" placeholder="(61) 9xxxx-xxxx"></label>
+        <label>Ramo / atividade<input name="ramo" placeholder="Ex.: estética, contabilidade…"></label>
+      </fieldset>
+
+      <label>Sala de interesse
+        <select name="sala" required>
+          <option value="">Selecione…</option>
+          ${opcoes(salas.map(s => [s.id, `${s.nome} — ${STATUS_LABEL[s.status]}`]), sala)}
+        </select>
+      </label>
+
+      <label>Resultado
+        <select name="resultado">${opcoes(Object.entries(RESULTADO_LABEL), v ? v.resultado : 'aberto')}</select>
+      </label>
+
+      <label>Observação<textarea name="obs" rows="3" placeholder="Ex.: voltou com o sócio, achou o valor alto…">${v ? v.obs : ''}</textarea></label>
+
+      <label class="check hidden" id="sugestao-sala"><input type="checkbox" name="atualizarSala" checked> <span></span></label>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Salvar</button>
+        <button type="button" class="btn" data-action="fechar">Cancelar</button>
+        ${v ? `<button type="button" class="btn danger" data-action="excluir-visita" data-id="${v.id}">Excluir</button>` : ''}
+      </div>
+    </form>
+  `);
+  atualizarFormVisita();
+}
+
+// o que fazer com a sala de acordo com o resultado da visita
+function sugestaoSala(form) {
+  const sala = salaById(+form.sala.value);
+  const res = form.resultado.value;
+  const pid = form.pessoa.value;
+  if (!sala || !pid) return null;
+  const nome = pid === 'nova' ? (limpa(form.nome.value) || 'o novo cliente') : pessoaById(+pid).nome;
+  if (res === 'fechou' && !(sala.status === 'alugada' && String(sala.pessoa) === pid))
+    return { status: 'alugada', texto: `Marcar ${sala.nome} como <b>Alugada</b> para ${nome}` };
+  if (res === 'negociando' && !(sala.status === 'processo' && String(sala.pessoa) === pid))
+    return { status: 'processo', texto: `Marcar ${sala.nome} como <b>Em processo</b> com ${nome}` };
+  if (res === 'naofechou' && sala.status === 'processo' && String(sala.pessoa) === pid)
+    return { status: 'disponivel', texto: `Voltar ${sala.nome} para <b>Disponível</b>` };
+  return null;
+}
+
+function atualizarFormVisita() {
+  const form = $('#form-visita');
+  if (!form) return;
+  const nova = form.pessoa.value === 'nova';
+  form.querySelector('.novo-cliente').classList.toggle('hidden', !nova);
+  form.nome.required = nova;
+  const sug = sugestaoSala(form);
+  const box = $('#sugestao-sala');
+  box.classList.toggle('hidden', !sug);
+  if (sug) box.querySelector('span').innerHTML = sug.texto;
+}
+
+function salvarVisita(form) {
+  let pessoa = form.pessoa.value;
+  const sug = sugestaoSala(form);
+  if (pessoa === 'nova') {
+    const p = { id: proximoId(dados.visitantes), nome: limpa(form.nome.value), telefone: limpa(form.telefone.value), ramo: limpa(form.ramo.value) };
+    dados.visitantes.push(p);
+    pessoa = p.id;
+  }
+  const registro = { data: form.data.value, sala: +form.sala.value, pessoa: +pessoa, resultado: form.resultado.value, obs: limpa(form.obs.value) };
+  const id = +form.dataset.id;
+  if (id) Object.assign(dados.visitas.find(x => x.id === id), registro);
+  else dados.visitas.push({ id: proximoId(dados.visitas), ...registro });
+
+  if (sug && form.atualizarSala.checked) {
+    const atual = dados.situacao[registro.sala] || {};
+    dados.situacao[registro.sala] = sug.status === 'disponivel'
+      ? { status: 'disponivel', alertas: atual.alertas || [] }
+      : { status: sug.status, pessoa: registro.pessoa, alertas: atual.alertas || [] };
+  }
+  salvar();
+  detalheSala(registro.sala);
+}
+
+// ---------- Sala ----------
+function formSala(id) {
+  const s = salaById(id);
+  const pessoaSel = s.pessoa ? s.pessoa : (s.inquilino || s.ramo) ? 'outro' : '';
+  abrirDrawer(`
+    <h3>Editar ${s.nome}</h3>
+    <form class="form" id="form-sala" data-id="${s.id}">
+      <label>Situação
+        <select name="status">${opcoes(Object.entries(STATUS_LABEL), s.status)}</select>
+      </label>
+
+      <div class="campo-pessoa">
+        <label><span class="rotulo-pessoa">Cliente</span>
+          <select name="pessoa">
+            <option value="">Selecione…</option>
+            ${opcoes(visitantes.map(p => [p.id, p.nome + (p.ramo ? ' — ' + p.ramo : '')]), pessoaSel)}
+            <option value="outro" ${pessoaSel === 'outro' ? 'selected' : ''}>Outro (sem visita registrada)</option>
+          </select>
+        </label>
+        <fieldset class="campo-outro hidden">
+          <legend>Outro cliente</legend>
+          <label>Nome<input name="inquilino" value="${s.inquilino || ''}" placeholder="Deixe vazio se não souber"></label>
+          <label>Ramo / atividade<input name="ramo" value="${s.ramo || ''}"></label>
+        </fieldset>
+      </div>
+
+      <label class="campo-motivo">Motivo<input name="motivo" value="${s.motivo || ''}" placeholder="Ex.: sem chaves, em reforma…"></label>
+
+      <div>
+        <div class="form-title">Pendências</div>
+        <div id="lista-pend">${s.alertas.map(linhaPendencia).join('')}</div>
+        <button type="button" class="btn small" data-action="add-pend">+ Adicionar pendência</button>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn primary">Salvar</button>
+        <button type="button" class="btn" data-action="voltar-sala" data-id="${s.id}">Cancelar</button>
+      </div>
+    </form>
+  `);
+  atualizarFormSala();
+}
+
+function linhaPendencia(a = { nivel: 'problema', texto: '' }) {
+  return `<div class="pend-row">
+    <select name="pend-nivel">${opcoes([['problema', '🟥 Problema'], ['atencao', '⚠️ Atenção']], a.nivel)}</select>
+    <input name="pend-texto" value="${a.texto}" placeholder="Ex.: porta não fecha">
+    <button type="button" class="btn small" data-action="rm-pend" title="Remover (resolvido)">✓ Resolvido</button>
+  </div>`;
+}
+
+function atualizarFormSala() {
+  const form = $('#form-sala');
+  if (!form) return;
+  const st = form.status.value;
+  const temPessoa = st === 'alugada' || st === 'processo';
+  form.querySelector('.campo-pessoa').classList.toggle('hidden', !temPessoa);
+  form.querySelector('.rotulo-pessoa').textContent = st === 'alugada' ? 'Inquilino' : 'Em negociação com';
+  form.querySelector('.campo-outro').classList.toggle('hidden', !(temPessoa && form.pessoa.value === 'outro'));
+  form.querySelector('.campo-motivo').classList.toggle('hidden', st !== 'indisponivel');
+}
+
+function salvarSala(form) {
+  const id = +form.dataset.id;
+  const st = form.status.value;
+  const sit = { status: st };
+  if (st === 'alugada' || st === 'processo') {
+    if (form.pessoa.value === 'outro') {
+      if (limpa(form.inquilino.value)) sit.inquilino = limpa(form.inquilino.value);
+      if (limpa(form.ramo.value)) sit.ramo = limpa(form.ramo.value);
+    } else if (form.pessoa.value) {
+      sit.pessoa = +form.pessoa.value;
+    }
+  }
+  if (st === 'indisponivel' && limpa(form.motivo.value)) sit.motivo = limpa(form.motivo.value);
+  const niveis = form.querySelectorAll('[name="pend-nivel"]');
+  sit.alertas = [...form.querySelectorAll('[name="pend-texto"]')]
+    .map((inp, i) => ({ nivel: niveis[i].value, texto: limpa(inp.value) }))
+    .filter(a => a.texto);
+  dados.situacao[id] = sit;
+  salvar();
+  detalheSala(id);
+}
+
+// ---------- Contato ----------
+function formPessoa(id) {
+  const p = pessoaById(id);
+  abrirDrawer(`
+    <h3>Editar contato</h3>
+    <form class="form" id="form-pessoa" data-id="${p.id}">
+      <label>Nome<input name="nome" required value="${p.nome}"></label>
+      <label>Telefone<input name="telefone" value="${p.telefone || ''}"></label>
+      <label>Ramo / atividade<input name="ramo" value="${p.ramo || ''}"></label>
+      <div class="actions">
+        <button type="submit" class="btn primary">Salvar</button>
+        <button type="button" class="btn" data-action="voltar-pessoa" data-id="${p.id}">Cancelar</button>
+      </div>
+    </form>
+  `);
+}
+
+function salvarPessoa(form) {
+  const p = dados.visitantes.find(x => x.id === +form.dataset.id);
+  Object.assign(p, { nome: limpa(form.nome.value), telefone: limpa(form.telefone.value), ramo: limpa(form.ramo.value) });
+  salvar();
+  detalhePessoa(p.id);
+}
+
+// ---------- Backup ----------
+function exportar() {
+  const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `simovel-backup-${hojeISO()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function importar(arquivo) {
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    try {
+      const novo = JSON.parse(leitor.result);
+      if (!novo.situacao || !novo.visitantes || !novo.visitas) throw new Error();
+      dados = novo;
+      salvar();
+      avisar('Backup importado');
+    } catch (e) { avisar('Arquivo inválido'); }
+  };
+  leitor.readAsText(arquivo);
+}
+function avisar(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(avisar.timer);
+  avisar.timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function renderTudo() {
+  renderResumo();
+  renderMapa();
+  renderPendencias();
+  renderVisitas();
+  renderPessoas();
+}
+
+/* =========================================================
+   EVENTOS
+   ========================================================= */
+// botões do dock: abre um painel por vez; clicar de novo fecha
+function alternarPainel(nome) {
+  const abrir = nome && !$('#painel-' + nome).classList.contains('open');
+  $$('.painel').forEach(p => p.classList.toggle('open', abrir && p.id === 'painel-' + nome));
+  $$('.dock [data-painel]').forEach(b => b.classList.toggle('active', abrir && b.dataset.painel === nome));
+}
+$$('.dock [data-painel]').forEach(b => b.addEventListener('click', () => alternarPainel(b.dataset.painel)));
+$$('[data-fechar-painel]').forEach(b => b.addEventListener('click', () => alternarPainel(null)));
+
+$$('.chip[data-status]').forEach(c => c.addEventListener('click', () => {
+  filtroStatus = c.dataset.status;
+  $$('.chip[data-status]').forEach(x => x.classList.toggle('active', x === c));
+  renderMapa();
+}));
+
+['#visit-search', '#visit-room', '#visit-result', '#visit-from', '#visit-to'].forEach(s =>
+  $(s).addEventListener('input', renderVisitas));
+$('#people-search').addEventListener('input', renderPessoas);
+
+$$('#painel-visitas th[data-sort]').forEach(th => th.addEventListener('click', () => {
+  const k = th.dataset.sort;
+  sortVisitas = { key: k, dir: sortVisitas.key === k ? -sortVisitas.dir : -1 };
+  renderVisitas();
+}));
+
+// botões de ação (formulários, editar, excluir…)
+const ACOES = {
+  'nova-visita': b => formVisita({ salaId: +b.dataset.salaId || '', pessoaId: +b.dataset.pessoaId || '' }),
+  'editar-visita': b => formVisita({ id: +b.dataset.id }),
+  'editar-sala': b => formSala(+b.dataset.id),
+  'editar-pessoa': b => formPessoa(+b.dataset.id),
+  'voltar-sala': b => detalheSala(+b.dataset.id),
+  'voltar-pessoa': b => detalhePessoa(+b.dataset.id),
+  'fechar': () => fecharDrawer(),
+  'add-pend': () => {
+    $('#lista-pend').insertAdjacentHTML('beforeend', linhaPendencia());
+    $('#lista-pend').lastElementChild.querySelector('input').focus();
+  },
+  'rm-pend': b => b.closest('.pend-row').remove(),
+  'excluir-visita': b => {
+    // pede um segundo clique para confirmar
+    if (!b.classList.contains('confirmar')) {
+      b.classList.add('confirmar');
+      b.textContent = 'Clique de novo para excluir';
+      return;
+    }
+    const v = dados.visitas.find(x => x.id === +b.dataset.id);
+    dados.visitas = dados.visitas.filter(x => x !== v);
+    salvar();
+    detalheSala(v.sala);
+    avisar('Visita excluída');
+  },
+  'exportar': () => exportar(),
+  'importar': () => $('#arquivo-backup').click(),
+};
+
+// clique delegado: ações primeiro; depois qualquer elemento com data-sala / data-pessoa abre o detalhe
+document.addEventListener('click', e => {
+  if (e.target.id === 'close-drawer' || e.target.id === 'overlay') return fecharDrawer();
+  const acao = e.target.closest('[data-action]');
+  if (acao) { e.preventDefault(); return ACOES[acao.dataset.action](acao); }
+  if (e.target.closest('form')) return;
+  const el = e.target.closest('[data-sala], [data-pessoa]');
+  if (!el) return;
+  if (el.dataset.sala) detalheSala(+el.dataset.sala);
+  else detalhePessoa(+el.dataset.pessoa);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  // fecha primeiro o detalhe da sala; se não houver, fecha o painel
+  if ($('#drawer').classList.contains('open')) fecharDrawer();
+  else alternarPainel(null);
+});
+
+// formulários dentro do painel lateral
+$('#drawer').addEventListener('input', () => { atualizarFormVisita(); atualizarFormSala(); });
+$('#drawer').addEventListener('change', () => { atualizarFormVisita(); atualizarFormSala(); });
+$('#drawer').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.id === 'form-visita') { salvarVisita(f); avisar('Visita salva'); }
+  if (f.id === 'form-sala') { salvarSala(f); avisar('Sala atualizada'); }
+  if (f.id === 'form-pessoa') { salvarPessoa(f); avisar('Contato atualizado'); }
+});
+$('#arquivo-backup').addEventListener('change', e => {
+  if (e.target.files[0]) importar(e.target.files[0]);
+  e.target.value = '';
+});
+
+/* =========================================================
+   INIT
+   ========================================================= */
+$('#visit-room').innerHTML += salas.map(s => `<option value="${s.id}">${s.nome}</option>`).join('');
+renderTudo();
+
+// tema claro / escuro (fica salvo no navegador)
+function aplicarTema(tema) {
+  document.documentElement.dataset.theme = tema;
+  $('#btn-tema-txt').textContent = tema === 'light' ? 'Claro' : 'Escuro';
+  try { localStorage.setItem('simovel-tema', tema); } catch (e) { }
+}
+aplicarTema(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+$('#btn-tema').addEventListener('click', () =>
+  aplicarTema(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+/* =========================================================
+   ZOOM DA MAQUETE
+   pinça (celular/touchpad), Ctrl + roda, botões + / −;
+   arrastar move a planta. O zoom mantém fixo o ponto sob o dedo/cursor.
+   ========================================================= */
+const visor = $('#visor'), planta = $('#floors');
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3;   // relativos ao tamanho "cabe na tela"
+const LARGURA_MIN = 960;             // abaixo disso a planta horizontal fica apertada: encolhe com zoom em vez de cortar
+let zoom = 1, zoomAjuste = 1, ultimaLargura = 0;
+
+// a largura da planta fica fixa em px, assim o zoom aumenta de verdade e o visor rola.
+// Em telas estreitas na horizontal (ex.: celular deitado) a planta é montada com 960px
+// e começa reduzida para caber inteira (zoomAjuste); isso é o "100%" para quem usa.
+function larguraBase() {
+  const w = visor.clientWidth;
+  if (w === ultimaLargura) return; // ignora mudanças só de altura (barra do navegador no celular)
+  ultimaLargura = w;
+  const vertical = matchMedia('(max-width: 760px)').matches;
+  const base = vertical ? w : Math.max(w, LARGURA_MIN);
+  planta.style.width = base + 'px';
+  zoomAjuste = w / base;
+  zoom = zoomAjuste;
+  planta.style.zoom = zoom;
+  $('#zoom-nivel').textContent = '100%';
+  visor.scrollLeft = 0;
+}
+
+function aplicarZoom(novo, cx, cy) {
+  novo = Math.min(ZOOM_MAX * zoomAjuste, Math.max(ZOOM_MIN * zoomAjuste, novo));
+  const r = planta.getBoundingClientRect();
+  if (cx == null) {
+    // sem ponto definido (botões): usa o centro da parte visível do visor
+    const v = visor.getBoundingClientRect();
+    cx = v.left + v.width / 2;
+    cy = (Math.max(v.top, 0) + Math.min(v.bottom, innerHeight)) / 2;
+  }
+  const px = (cx - r.left) / zoom, py = (cy - r.top) / zoom;
+  zoom = novo;
+  planta.style.zoom = zoom;
+  const r2 = planta.getBoundingClientRect();
+  visor.scrollLeft += r2.left + px * zoom - cx;
+  window.scrollBy(0, r2.top + py * zoom - cy);
+  $('#zoom-nivel').textContent = Math.round(zoom / zoomAjuste * 100) + '%';
+}
+
+// Ctrl + roda do mouse (a pinça do touchpad também chega assim)
+visor.addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  aplicarZoom(zoom * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+}, { passive: false });
+
+// pinça com dois dedos
+let pinca = null;
+const distancia = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+visor.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) pinca = { d: distancia(e.touches), z: zoom };
+}, { passive: true });
+visor.addEventListener('touchmove', e => {
+  if (!pinca || e.touches.length !== 2) return;
+  e.preventDefault();
+  const [a, b] = e.touches;
+  aplicarZoom(pinca.z * distancia(e.touches) / pinca.d, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+}, { passive: false });
+visor.addEventListener('touchend', e => { if (e.touches.length < 2) pinca = null; });
+
+// arrastar com o mouse para mover (no toque o próprio navegador já rola)
+let arrasto = null, arrastou = false;
+visor.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  e.preventDefault(); // evita selecionar texto
+  arrasto = { x: e.clientX, y: e.clientY };
+  arrastou = false;
+});
+window.addEventListener('pointermove', e => {
+  if (!arrasto) return;
+  const dx = e.clientX - arrasto.x, dy = e.clientY - arrasto.y;
+  if (!arrastou && Math.hypot(dx, dy) < 5) return;
+  arrastou = true;
+  visor.classList.add('arrastando');
+  visor.scrollLeft -= dx;
+  window.scrollBy(0, -dy);
+  arrasto = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('pointerup', () => { arrasto = null; visor.classList.remove('arrastando'); });
+// depois de arrastar, o soltar do mouse não deve abrir a sala
+visor.addEventListener('click', e => {
+  if (arrastou) { e.stopPropagation(); e.preventDefault(); arrastou = false; }
+}, true);
+
+$$('.zoom-ctrl [data-zoom]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.zoom === 'in') aplicarZoom(zoom * 1.25);
+  else if (b.dataset.zoom === 'out') aplicarZoom(zoom / 1.25);
+  else { aplicarZoom(zoomAjuste); visor.scrollLeft = 0; }
+}));
+
+window.addEventListener('resize', larguraBase);
+larguraBase();
+
+// mostrar só a planta (esconde as etiquetas); a escolha fica salva no navegador
+function mostrarCards(mostrar) {
+  document.body.classList.toggle('sem-cards', !mostrar);
+  $('#btn-cards').setAttribute('aria-pressed', String(!mostrar));
+  $('#btn-cards').title = mostrar ? 'Esconder as etiquetas (mostrar só a planta)' : 'Mostrar as etiquetas das salas';
+  try { localStorage.setItem('simovel-cards', mostrar ? '1' : '0'); } catch (e) { }
+}
+let cardsSalvo = '1';
+try { cardsSalvo = localStorage.getItem('simovel-cards') || '1'; } catch (e) { }
+mostrarCards(cardsSalvo === '1');
+$('#btn-cards').addEventListener('click', () => mostrarCards(document.body.classList.contains('sem-cards')));
+</script>
+</body>
+</html>
