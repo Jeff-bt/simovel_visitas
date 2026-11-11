@@ -962,6 +962,163 @@
       border-top: 2px solid #3b332c; border-right: 1px dashed rgba(50, 35, 20, .55); border-bottom: 1px dashed rgba(50, 35, 20, .55); border-bottom-right-radius: 100%;
     }
   }
+
+  /* ===== VISTA PRÉDIO: o prédio real em 3D (CSS puro) =====
+     Volume sólido visto em 3/4, como na foto da rua. A "cena" é a projeção do prédio no chão
+     (largura x profundidade); fachada, lateral, telhado e torre são planos levantados a partir
+     das bordas dela com preserve-3d. A fachada usa a MESMA grade de colunas da planta:
+     107 106 105 104 | escada | 103 102 101 — cada módulo entre pilares (2 janelas) é uma sala. */
+  .filtros.vista { display: inline-flex; margin: 0 0 10px; }
+  .predio {
+    --rx: 72deg;          /* inclinação da câmera (90 = olhando reto para a fachada) */
+    --rz: -16deg;         /* giro: deixa a lateral esquerda aparecer, como na foto */
+    --D: 200px;           /* profundidade do prédio */
+    --pilar: #c4474e;     /* vermelho dos pilares */
+    --reboco: #ecd9c3;    /* bege da fachada */
+    --escala: 1;          /* ajustada pelo JS para caber na largura da tela */
+    position: relative; height: calc(760px * var(--escala)); overflow: hidden;
+  }
+  .predio-cena {
+    position: absolute; left: 50%; top: 84%; width: 960px; height: var(--D);
+    transform: translate(-50%, -50%) scale(var(--escala)) rotateX(var(--rx)) rotateZ(var(--rz));
+    transform-style: preserve-3d;
+  }
+  .predio-cena > * { position: absolute; }
+  /* sombra do prédio na calçada */
+  .predio .chao { inset: -30px -40px -70px; background: radial-gradient(closest-side, rgba(0, 0, 0, .35), transparent); }
+
+  /* fachada: levanta da borda da frente (rotateX(-90deg) a partir de baixo) */
+  .predio .fachada {
+    left: 0; bottom: 0; width: 100%; height: var(--H);
+    transform-origin: bottom; transform: rotateX(-90deg); transform-style: preserve-3d;
+    display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr .45fr 1fr 1fr 1.25fr;   /* igual à .plan */
+    column-gap: 10px; padding: 0 10px; background: var(--pilar);                       /* o "vão" vermelho são os pilares */
+  }
+  /* lateral esquerda: levanta da borda esquerda (rotateY(-90deg)); x local = altura */
+  .predio .lateral {
+    left: 0; top: 0; width: var(--H); height: 100%; transform-origin: left; transform: rotateY(-90deg);
+    background:
+      linear-gradient(to top, var(--pilar) 0 10px, transparent 10px),
+      linear-gradient(to right, transparent calc(100% - 46px), rgba(255, 255, 255, .25) calc(100% - 46px)),
+      linear-gradient(to right, #c7b39c 0 150px, #d6c2aa 150px);
+  }
+  .predio .telhado { inset: 0; transform: translateZ(var(--H)); background: #c9bcaa; box-shadow: inset 0 0 0 7px #ddd1c0; }
+  /* torre da escada / caixa d'água, por cima da coluna da escada */
+  .predio .torre { left: 51%; width: 10.5%; bottom: 0; height: 62%; transform: translateZ(var(--H)); transform-style: preserve-3d; --T: 84px; }
+  .predio .torre i { position: absolute; }
+  .predio .torre .f { left: 0; bottom: 0; width: 100%; height: var(--T); transform-origin: bottom; transform: rotateX(-90deg); background: var(--reboco); box-shadow: inset 0 0 0 6px var(--pilar); }
+  .predio .torre .l { left: 0; top: 0; width: var(--T); height: 100%; transform-origin: left; transform: rotateY(-90deg); background: #d3bfa7; }
+  .predio .torre .t { inset: 0; transform: translateZ(var(--T)); background: #e2d5c4; }
+
+  /* células da fachada */
+  .fachada > * { position: relative; }
+  .fachada .platibanda { background: linear-gradient(#f4e6d4, #e4cfb7); box-shadow: inset 0 -10px 12px -8px rgba(60, 30, 10, .35); }
+  .baia {
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 12px 6px 10px; border: 0; border-top: 1px solid rgba(90, 60, 30, .12);
+    background: var(--reboco); font: inherit; color: inherit;
+  }
+  .baia .janelas { display: flex; justify-content: center; gap: 12%; width: 100%; }
+  .baia .janelas i {
+    width: 36%; height: 58px; border: 3px solid #f6f3ee; box-shadow: 0 3px 0 rgba(80, 50, 20, .18);
+    background: repeating-linear-gradient(180deg, #2b6d67 0 3px, #6cb0a6 3px 6px);   /* veneziana verde, como na foto */
+  }
+  .baia.escada .janelas i { width: 64%; }
+  /* sala: as duas janelas ficam na cor do status */
+  .baia.sala { cursor: pointer; transition: filter .15s, opacity .2s; }
+  .baia.sala .janelas i { background: repeating-linear-gradient(180deg, color-mix(in srgb, var(--cor) 70%, #10201f) 0 3px, color-mix(in srgb, var(--cor) 55%, #fff) 3px 6px); }
+  .baia.sala.alugada { --cor: var(--alugada); }
+  .baia.sala.disponivel { --cor: var(--disponivel); }
+  .baia.sala.processo { --cor: var(--processo); }
+  .baia.sala.indisponivel { --cor: var(--indisponivel); }
+  .baia.sala:hover { filter: brightness(1.07); }
+  .baia.sala:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+  /* fora do filtro: mesmo efeito da planta (.room.dim), mas só no conteúdo do módulo; a parede bege
+     fica sólida, senão o fundo vermelho da fachada (os pilares) apareceria através dela */
+  .baia.sala.dim { filter: grayscale(.9); }
+  .baia.sala.dim > *, .baia.sala.dim::after { opacity: .28; }
+  /* guarda-corpo na frente do 1º andar */
+  .baia.andar-1::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 18px; pointer-events: none;
+    background: linear-gradient(#f6f3ee, #f6f3ee) top / 100% 3px no-repeat, repeating-linear-gradient(90deg, #f6f3ee 0 2px, transparent 2px 8px);
+  }
+  /* plaquinha da sala (nº, status, quem) */
+  .baia .rot {
+    position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; max-width: 100%;
+    padding: 4px 8px 5px; border-radius: 5px; white-space: nowrap; font-size: 10px; line-height: 1.25;
+    background: var(--placa-bg); color: var(--placa-texto); box-shadow: 0 4px 10px -4px rgba(0, 0, 0, .45); transition: opacity .2s;
+  }
+  .baia .rot b { font-size: 14px; font-weight: 800; letter-spacing: -.01em; }
+  .baia .rot em { font-style: normal; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--cor); }
+  .baia .rot small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--placa-muted); font-size: 9.5px; }
+  .baia .rot small.ramo { font-style: italic; font-size: 9px; }
+  .sem-cards .baia .rot { opacity: 0; pointer-events: none; }
+
+  /* térreo: lojas com porta de enrolar e o portão de entrada embaixo da escada */
+  .fachada .loja, .fachada .portao { background: var(--reboco); border-top: 1px solid rgba(90, 60, 30, .12); }
+  .fachada .loja::before, .fachada .portao::before { content: ""; position: absolute; left: 10%; right: 10%; bottom: 0; height: 62%; }
+  .fachada .loja::before { background: repeating-linear-gradient(180deg, #dcd8d0 0 4px, #bab5ab 4px 5px); border: 2px solid #9a948a; border-bottom: 0; }
+  .fachada .portao::before { left: 8%; right: 8%; background: repeating-linear-gradient(90deg, #4a4a4a 0 2px, transparent 2px 6px), #efe9df; }
+  /* toldo das lojas: pendurado na fachada e inclinado para a rua */
+  .fachada .toldo {
+    position: absolute; left: -8px; right: -8px; height: 30px; transform-origin: top; transform: rotateX(68deg);
+    background: repeating-linear-gradient(90deg, #f6f3ee 0 7px, #d3cdc3 7px 9px); box-shadow: 0 2px 0 #b9b2a6;
+  }
+  .fachada .andar-rot {
+    position: absolute; left: calc(100% + 18px); transform: translateY(-50%);
+    font: 600 11px/1 "Manrope", sans-serif; letter-spacing: .22em; text-transform: uppercase; color: #e4e1db; white-space: nowrap;
+  }
+  [data-theme="light"] .fachada .andar-rot { color: #3a332b; }
+
+  /* ===== INTERIOR DA SALA (no drawer): corte 3D tipo "casa de bonecas" =====
+     Câmera do lado do corredor; paredes da frente e da esquerda cortadas baixas para ver dentro.
+     Tudo é feito de "cubos": 3 faces visíveis (topo, frente, lado esquerdo) levantadas com preserve-3d. */
+  .interior {
+    --rx: 56deg; --rz: -30deg;
+    position: relative; height: 370px; margin: 14px 0 0; border-radius: 12px; overflow: hidden;
+    background: radial-gradient(ellipse at 50% 35%, #3a3d43, #1d1f23 75%);
+  }
+  [data-theme="light"] .interior { background: radial-gradient(ellipse at 50% 35%, #fbf8f3, #e4ddd0 80%); }
+  .interior-cena {
+    position: absolute; left: 50%; top: 61%; width: 260px; height: 400px;
+    transform: translate(-50%, -50%) rotateX(var(--rx)) rotateZ(var(--rz)); transform-style: preserve-3d;
+    background: linear-gradient(rgba(255, 255, 255, .06), rgba(0, 0, 0, .1)), var(--madeira) 0 0 / 96px 240px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .25);
+  }
+  .interior-cena > * { position: absolute; }
+  .cubo { transform-style: preserve-3d; }
+  .cubo i { position: absolute; background: var(--c, #f3efe8); }
+  .cubo .t { inset: 0; transform: translateZ(var(--a)); filter: brightness(1.05); }
+  .cubo .s { left: 0; bottom: 0; width: 100%; height: var(--a); transform-origin: bottom; transform: rotateX(-90deg); }
+  .cubo .o { left: 0; top: 0; width: var(--a); height: 100%; transform-origin: left; transform: rotateY(-90deg); filter: brightness(.84); }
+  /* paredes: topo escuro = convenção de corte em arquitetura */
+  .cubo.parede { --c: #f4f1eb; }
+  .cubo.parede .t { background: #4a4038; filter: none; }
+  .cubo.parede .s { filter: brightness(.97); }
+  /* janelas na face interna da parede do fundo (veneziana com luz passando) */
+  .cubo .s b {
+    position: absolute; top: 20%; width: 30%; height: 50%; border: 3px solid #fff;
+    background: repeating-linear-gradient(180deg, #d9eef0 0 3px, #8dbfc2 3px 6px); box-shadow: 0 0 18px rgba(255, 245, 210, .6);
+  }
+  .piso-banheiro {
+    transform: translateZ(1px);
+    background: linear-gradient(rgba(120, 130, 135, .25) 1px, transparent 1px) 0 0 / 12px 12px,
+                linear-gradient(90deg, rgba(120, 130, 135, .25) 1px, transparent 1px) 0 0 / 12px 12px, #eef1f1;
+  }
+  .cubo.louca { --c: #ffffff; }
+  .cubo.mesa { --c: #9a7550; }
+  .cubo.cadeira { --c: #3a3f47; }
+  .cubo.armario { --c: #d8d1c4; }
+  .cubo.maca { --c: #e9eeee; }
+  .cubo.maca .t { background: #7fb9b3; filter: none; }
+  .cubo.tapete { --c: #4f9d94; }
+  .cubo.peso { --c: #2e3238; }
+  .cubo.caixa { --c: #c8a676; }
+  .interior .leg {
+    position: absolute; left: 12px; bottom: 10px; right: 12px; font-size: 11.5px; color: #c9c5bd;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  [data-theme="light"] .interior .leg { color: #6f665b; }
 </style>
 </head>
 <body>
@@ -1007,6 +1164,10 @@
 </nav>
 
 <main class="palco">
+  <div class="filtros vista" role="group" aria-label="Visualização">
+    <button class="chip" data-vista="planta">Planta</button>
+    <button class="chip" data-vista="predio">Prédio 3D</button>
+  </div>
   <div class="visor" id="visor">
     <div id="floors" class="floors"></div>
   </div>
@@ -1320,9 +1481,17 @@ function renderResumo() {
    MAPA DE SALAS
    ========================================================= */
 let filtroStatus = 'todas';
+let vista = 'planta';   // 'planta' | 'predio' — a escolha fica salva no navegador
+try { vista = localStorage.getItem('simovel-vista') || 'planta'; } catch (e) { }
+
+const passaFiltro = s => filtroStatus === 'todas' || s.status === filtroStatus || (filtroStatus === 'pendencia' && s.alertas.length);
+function tituloSala(s) {
+  const alertas = textoAlertas(s);
+  return `${s.nome} · ${STATUS_LABEL[s.status]}${descricaoSala(s) ? ' · ' + descricaoSala(s) : ''}${alertas ? ' · ' + alertas : ''}`;
+}
+
 function cartaoSala(s, match) {
   const vs = visitasDaSala(s.id);
-  const alertas = textoAlertas(s);
   let who = '';
   if (s.pessoa) {
     const p = pessoaById(s.pessoa);
@@ -1334,8 +1503,7 @@ function cartaoSala(s, match) {
   }
   const pend = s.alertas.map(a => `<div class="pend ${a.nivel}">${ALERTA_ICONE[a.nivel]} ${a.texto}</div>`).join('');
   return `
-    <button class="room pos-${s.pos} ${s.status} ${match ? '' : 'dim'}" data-sala="${s.id}"
-      title="${s.nome} · ${STATUS_LABEL[s.status]}${descricaoSala(s) ? ' · ' + descricaoSala(s) : ''}${alertas ? ' · ' + alertas : ''}">
+    <button class="room pos-${s.pos} ${s.status} ${match ? '' : 'dim'}" data-sala="${s.id}" title="${tituloSala(s)}">
       <span class="janela"></span><span class="porta"></span>
       <span class="banheiro ${BANHEIRO_ESQ.includes(s.pos) ? 'esq' : 'dir'}"><i class="vaso"></i><i class="pia"></i></span>
       <div class="tag">
@@ -1351,6 +1519,8 @@ function cartaoSala(s, match) {
 }
 
 function renderMapa() {
+  $$('[data-vista]').forEach(b => b.classList.toggle('active', b.dataset.vista === vista));
+  if (vista === 'predio') return renderPredio();
   // andar mais alto em cima, 1º embaixo (como num corte do prédio)
   const andares = [...new Set(salas.map(s => s.andar))].sort((a, b) => b - a);
   $('#floors').innerHTML = andares.map(andar => `
@@ -1359,13 +1529,61 @@ function renderMapa() {
       <div class="plan">
         <div class="corredor">Corredor</div>
         <div class="escada" title="Escada"><span class="corte"></span><span class="rotulo">Escada</span></div>
-        ${salas.filter(s => s.andar === andar).map(s => {
-          const okStatus = filtroStatus === 'todas' || s.status === filtroStatus || (filtroStatus === 'pendencia' && s.alertas.length);
-          return cartaoSala(s, okStatus);
-        }).join('')}
+        ${salas.filter(s => s.andar === andar).map(s => cartaoSala(s, passaFiltro(s))).join('')}
       </div>
     </div>
   `).join('');
+}
+
+/* PRÉDIO 3D — o prédio como ele é visto da rua: térreo com lojas e, acima, os andares de salas.
+   A fachada usa a mesma grade de colunas da planta; cada módulo entre pilares (2 janelas) é uma sala.
+   Cada sala continua sendo um <button data-sala>, então clique, filtro e drawer funcionam igual. */
+const COLUNA_FACHADA = { p1: 1, a1: 2, a2: 3, a3: 4, b1: 6, b2: 7, p2: 8 };   // coluna 5 = escada
+const COLUNAS_LOJA = [1, 2, 3, 4, 6, 7, 8];
+const ALT_PLATIBANDA = 46, ALT_ANDAR = 150;   // px: faixa do topo e altura de cada pavimento (inclui o térreo)
+
+function baiaSala(s, match, linha) {
+  const p = s.pessoa ? pessoaById(s.pessoa) : null;
+  const quem = p ? p.nome : (s.inquilino || s.motivo || '');
+  const ramo = p ? p.ramo : s.ramo;   // tipo de negócio: Contabilidade, Estética…
+  return `
+    <button class="baia sala andar-${s.andar} ${s.status} ${match ? '' : 'dim'}" data-sala="${s.id}" title="${tituloSala(s)}"
+      style="grid-column:${COLUNA_FACHADA[s.pos]};grid-row:${linha}">
+      <span class="janelas"><i></i><i></i></span>
+      <span class="rot"><b>${s.id}${s.alertas.length ? ' ⚠️' : ''}</b><em>${STATUS_LABEL[s.status]}</em>${quem ? `<small>${quem}</small>` : ''}${ramo ? `<small class="ramo">${ramo}</small>` : ''}</span>
+    </button>`;
+}
+function renderPredio() {
+  const N = Math.max(...salas.map(s => s.andar));        // andares de salas (o térreo vem a mais)
+  const linha = andar => 1 + (N - andar + 1);             // linha 1 = platibanda; o andar mais alto vem logo abaixo
+  const linhaTerreo = N + 2;
+  const H = ALT_PLATIBANDA + ALT_ANDAR * (N + 1);
+  const meio = l => ALT_PLATIBANDA + ALT_ANDAR * (l - 2) + ALT_ANDAR / 2;   // centro vertical de uma linha (para os rótulos)
+  const andares = Array.from({ length: N }, (_, i) => N - i);
+
+  $('#floors').innerHTML = `
+    <div class="predio" style="--H:${H}px"><div class="predio-cena">
+      <div class="chao"></div>
+      <div class="lateral"></div>
+      <div class="telhado"></div>
+      <div class="torre"><i class="f"></i><i class="l"></i><i class="t"></i></div>
+      <div class="fachada" style="grid-template-rows:${ALT_PLATIBANDA}px repeat(${N + 1}, ${ALT_ANDAR}px)">
+        ${Array.from({ length: 8 }, (_, i) => `<div class="platibanda" style="grid-column:${i + 1};grid-row:1"></div>`).join('')}
+        ${andares.map(a => `<div class="baia escada andar-${a}" title="Escada" style="grid-column:5;grid-row:${linha(a)}"><span class="janelas"><i></i></span></div>`).join('')}
+        ${salas.map(s => baiaSala(s, passaFiltro(s), linha(s.andar))).join('')}
+        ${COLUNAS_LOJA.map(c => `<div class="loja" title="Térreo — lojas" style="grid-column:${c};grid-row:${linhaTerreo}"></div>`).join('')}
+        <div class="portao" title="Entrada" style="grid-column:5;grid-row:${linhaTerreo}"></div>
+        <div class="toldo" style="top:${ALT_PLATIBANDA + ALT_ANDAR * N + 14}px"></div>
+        ${andares.map(a => `<span class="andar-rot" style="top:${meio(linha(a))}px">${a}º andar</span>`).join('')}
+        <span class="andar-rot" style="top:${meio(linhaTerreo)}px">Térreo · lojas</span>
+      </div>
+    </div></div>`;
+  ajustarPredio();
+}
+// a cena tem 960px de largura fixa; em telas menores ela é reduzida para caber (o zoom continua valendo por cima)
+function ajustarPredio() {
+  const el = $('.predio');
+  if (el) el.style.setProperty('--escala', Math.min(1, ($('#floors').clientWidth - 16) / 1080).toFixed(3));
 }
 
 function renderPendencias() {
@@ -1465,6 +1683,83 @@ function fecharDrawer() {
   $('#overlay').classList.remove('open');
 }
 
+/* INTERIOR DA SALA — ilustração 3D mostrada no drawer.
+   Medidas em px da cena (260 x 400 ≈ proporção da sala na planta). O banheiro fica no fundo,
+   do lado que a planta define (BANHEIRO_ESQ), com a porta no mesmo lugar da planta.
+   Os móveis são só ilustrativos, escolhidos pelo ramo de quem alugou. */
+const INT = { W: 260, D: 400, A: 120, T: 8, BW: 125, BD: 120, CORTE: 16, BANHO: 76 };
+// cubo = caixa com as 3 faces que a câmera enxerga (topo, frente, lado esquerdo)
+const cubo = (x, y, w, d, a, cls = '', frente = '') =>
+  `<span class="cubo ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${d}px;--a:${a}px"><i class="t"></i><i class="s">${frente}</i><i class="o"></i></span>`;
+
+function moveisPorRamo(ramo) {
+  const { W, T, BD } = INT;
+  const r = (ramo || '').toLowerCase();
+  if (/est[eé]tica|m[eé]dic|consult|odonto|fisio|clínica|clinica/.test(r)) return [   // maca + mesinha
+    cubo(34, BD + 60, 56, 124, 36, 'maca'),
+    cubo(W - T - 84, BD + 56, 70, 38, 40, 'mesa'),
+    cubo(W - T - 62, BD + 100, 24, 24, 24, 'cadeira'),
+  ];
+  if (/trein|f[ií]sic|academ|pilates|yoga|personal/.test(r)) return [               // tapete + pesos
+    cubo(40, BD + 60, 92, 160, 3, 'tapete'),
+    cubo(170, BD + 80, 14, 30, 12, 'peso'), cubo(196, BD + 80, 14, 30, 12, 'peso'),
+    cubo(W - T - 30, BD + 150, 22, 90, 60, 'armario'),
+  ];
+  return [                                                                            // escritório
+    cubo(W / 2 - 54, BD + 96, 108, 48, 40, 'mesa'),
+    cubo(W / 2 - 13, BD + 152, 26, 26, 26, 'cadeira'),
+    cubo(W / 2 - 13, BD + 60, 26, 26, 26, 'cadeira'),
+    cubo(W - T - 34, BD + 36, 34, 104, 96, 'armario'),
+  ];
+}
+
+function interiorSala(s) {
+  const { W, D, A, T, BW, BD, CORTE, BANHO } = INT;
+  const esq = BANHEIRO_ESQ.includes(s.pos);
+  const portaEmBaixo = ['a1', 'a2'].includes(s.pos);   // x05 e x06: porta do banheiro na parede de baixo
+  const janelas = '<b style="left:14%"></b><b style="left:56%"></b>';
+  const pecas = [
+    // paredes externas: fundo (janelas) e direita inteiras; esquerda e frente cortadas baixas
+    cubo(0, 0, W, T, A, 'parede', janelas),
+    cubo(W - T, 0, T, D, A, 'parede'),
+    cubo(0, 0, T, D, CORTE, 'parede'),
+    cubo(0, D - T, 16, T, CORTE, 'parede'), cubo(72, D - T, W - 72, T, CORTE, 'parede'),   // vão da porta para o corredor
+  ];
+  // banheiro no fundo: piso de azulejo + 2 paredes baixas (com vão da porta) + vaso e pia
+  const x0 = esq ? T : W - BW, x1 = esq ? BW : W - T;          // faixa do banheiro no eixo x
+  const xLado = esq ? BW - T : W - BW;                          // parede lateral (a que dá para a sala)
+  pecas.push(`<span class="piso-banheiro" style="left:${x0}px;top:${T}px;width:${x1 - x0}px;height:${BD - T}px"></span>`);
+  if (portaEmBaixo) {
+    pecas.push(cubo(x0, BD - T, x1 - x0 - 48, T, BANHO, 'parede'), cubo(x1 - 10, BD - T, 10, T, BANHO, 'parede'));
+    pecas.push(cubo(xLado, T, T, BD - T, BANHO, 'parede'));
+  } else {
+    pecas.push(cubo(x0, BD - T, x1 - x0, T, BANHO, 'parede'));
+    pecas.push(cubo(xLado, T, T, BD - 58, BANHO, 'parede'), cubo(xLado, BD - 14, T, 14, BANHO, 'parede'));
+  }
+  const vasoX = esq ? T + 10 : W - T - 30, piaX = esq ? BW - 56 : W - BW + 22;
+  pecas.push(cubo(vasoX, T + 8, 20, 26, 22, 'louca'), cubo(piaX, T + 2, 32, 18, 34, 'louca'));
+
+  // móveis: só quando a sala está alugada (ilustrativo, pelo ramo)
+  const p = s.pessoa ? pessoaById(s.pessoa) : null;
+  const ramo = p ? p.ramo : s.ramo;
+  let legenda;
+  if (s.status === 'alugada') {
+    pecas.push(...moveisPorRamo(ramo));
+    legenda = `<span>${ramo || 'Ocupada'}</span><span>móveis ilustrativos</span>`;
+  } else {
+    // sala usada como depósito (vem da pendência cadastrada, ex.: "Depósito — sala com várias caixas")
+    const deposito = s.alertas.some(a => /caixa|dep[oó]sito/i.test(a.texto));
+    if (deposito) pecas.push(cubo(40, BD + 120, 40, 40, 34, 'caixa'), cubo(90, BD + 130, 34, 34, 28, 'caixa'),
+                             cubo(52, BD + 170, 36, 36, 30, 'caixa'), cubo(150, BD + 200, 44, 40, 36, 'caixa'));
+    const estado = s.status === 'indisponivel' ? `Não disponível${s.motivo ? ' — ' + s.motivo : ''}` : deposito ? 'Usada como depósito' : 'Sala vazia';
+    legenda = `<span>${estado}</span><span>${s.area} m²</span>`;
+  }
+  return `<div class="interior" title="Interior da ${s.nome} (ilustração)">
+    <div class="interior-cena">${pecas.join('')}</div>
+    <div class="leg">${legenda}</div>
+  </div>`;
+}
+
 function detalheSala(id) {
   const s = salaById(id);
   const vs = visitasDaSala(id);
@@ -1495,6 +1790,7 @@ function detalheSala(id) {
       <button class="btn primary" data-action="editar-sala" data-id="${s.id}">✏️ Editar sala</button>
       <button class="btn" data-action="nova-visita" data-sala-id="${s.id}">+ Registrar visita</button>
     </div>
+    ${interiorSala(s)}
     <div class="info">
       <div><div class="k">Andar</div><div class="v">${s.andar}º</div></div>
       <div><div class="k">Área</div><div class="v">${s.area} m²</div></div>
@@ -1833,6 +2129,12 @@ $$('.chip[data-status]').forEach(c => c.addEventListener('click', () => {
   $$('.chip[data-status]').forEach(x => x.classList.toggle('active', x === c));
   renderMapa();
 }));
+$$('[data-vista]').forEach(b => b.addEventListener('click', () => {
+  vista = b.dataset.vista;
+  try { localStorage.setItem('simovel-vista', vista); } catch (e) { }
+  renderMapa();
+}));
+window.addEventListener('resize', ajustarPredio);
 
 ['#visit-search', '#visit-room', '#visit-from', '#visit-to'].forEach(s =>
   $(s).addEventListener('input', renderVisitas));
