@@ -538,7 +538,7 @@
   .rodape-prancha { display: flex; justify-content: center; max-width: 1700px; margin: 0 auto; padding: 0 6px; }
   .dot.pendencia { background: transparent; border-radius: 2px; box-shadow: inset 0 0 0 2px var(--alugada); }
   .carimbo {
-    display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); color: var(--ui-texto);
+    display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); color: var(--ui-texto);
     border: 1px solid var(--ui-linha); border-radius: 14px; background: rgba(255, 255, 255, .03);
   }
   .carimbo > div { padding: 14px 26px; text-align: center; }
@@ -547,6 +547,8 @@
   .carimbo .v { font-size: 28px; font-weight: 700; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
   .carimbo .v small { font-size: 15px; font-weight: 500; color: var(--ui-muted); margin-left: 4px; }
   .carimbo .v.desistiram { color: #f08a80; }
+  .carimbo .v.alugaram { color: #6fd39a; }
+  .carimbo .v.processo { color: #f2b544; }
 
   /* dock de botões */
   .dock {
@@ -664,6 +666,8 @@
   [data-theme="light"] .filtros .chip.active { color: #fff; background: #2a251f; box-shadow: 0 2px 8px rgba(40, 25, 10, .25); }
   [data-theme="light"] .carimbo { background: rgba(255, 255, 255, .6); }
   [data-theme="light"] .carimbo .v.desistiram { color: #c0443a; }
+  [data-theme="light"] .carimbo .v.alugaram { color: #1f8a4c; }
+  [data-theme="light"] .carimbo .v.processo { color: #b37200; }
   [data-theme="light"] .dock { box-shadow: 0 16px 40px -12px rgba(60, 40, 20, .3); }
   [data-theme="light"] .dock button:hover { color: #2a251f; background: rgba(70, 55, 40, .06); }
   [data-theme="light"] .dock button.active { color: #2a251f; background: rgba(70, 55, 40, .1); }
@@ -897,6 +901,8 @@
     .carimbo > div:nth-child(even) { border-left: 1px solid var(--ui-linha); }
     .carimbo > div:nth-child(n + 3) { border-top: 1px solid var(--ui-linha); }
     .carimbo .v { font-size: 24px; }
+    /* com 5 números, o último ocupa a linha inteira */
+    .carimbo > div:last-child:nth-child(odd) { grid-column: 1 / -1; border-left: 0; }
 
     /* dock vira barra inferior */
     .dock { top: auto; bottom: 12px; left: 12px; right: 12px; transform: none; flex-direction: row; justify-content: space-around; padding: 6px; }
@@ -1012,6 +1018,8 @@
       <div><div class="k">Salas alugadas</div><div class="v" id="resumo"></div></div>
       <div><div class="k">Visitas</div><div class="v" id="kpi-visitas"></div></div>
       <div><div class="k">Pessoas</div><div class="v" id="kpi-pessoas"></div></div>
+      <div id="kpi-alugaram-box"><div class="k">Alugaram</div><div class="v alugaram" id="kpi-alugaram"></div></div>
+      <div id="kpi-processo-box"><div class="k">Em processo</div><div class="v processo" id="kpi-processo"></div></div>
       <div id="kpi-desistiram-box"><div class="k">Desistiram</div><div class="v desistiram" id="kpi-desistiram"></div></div>
     </div>
   </div>
@@ -1030,13 +1038,6 @@
       <div class="toolbar">
         <input type="search" id="visit-search" placeholder="Buscar visitante, sala, observação…">
         <select id="visit-room"><option value="">Todas as salas</option></select>
-        <select id="visit-result">
-          <option value="">Qualquer resultado</option>
-          <option value="fechou">Fechou</option>
-          <option value="negociando">Em negociação</option>
-          <option value="aberto">Em aberto</option>
-          <option value="naofechou">Não fechou</option>
-        </select>
         <label class="muted">De <input type="date" id="visit-from"></label>
         <label class="muted">Até <input type="date" id="visit-to"></label>
       </div>
@@ -1047,7 +1048,6 @@
             <th data-sort="sala">Sala de interesse</th>
             <th data-sort="visitante">Visitante</th>
             <th data-sort="vez">Visita nº</th>
-            <th data-sort="resultado">Resultado</th>
             <th>Observação</th>
             <th></th>
           </tr></thead>
@@ -1069,6 +1069,7 @@
             <th>Nome</th>
             <th>Telefone</th>
             <th>Ramo</th>
+            <th>Status</th>
             <th>Total de visitas</th>
             <th>Salas de interesse</th>
             <th>Primeira visita</th>
@@ -1127,7 +1128,7 @@ const BANHEIRO_ESQ = ['p2', 'a1', 'a2', 'a3'];
 const SITUACAO = {
   101: { status: 'alugada',  pessoa: 3 },   // Daniel Michael
   102: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Porta não fecha' }] },
-  103: { status: 'processo', pessoa: 1 },   // Sthella Regina
+  103: { status: 'alugada',  pessoa: 1 },   // Sthella Regina
   104: { status: 'processo', pessoa: 5 },   // Wesleany
   105: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Piso oco quebrado' }] },
   107: { status: 'alugada', inquilino: 'Sem nome', ramo: 'Contabilidade' },   // inquilino sem visita registrada: use inquilino/ramo direto
@@ -1154,7 +1155,7 @@ const VISITAS_RAW = [
   { data: '2026-08-01', sala: 103, pessoa: 1, resultado: 'negociando', obs: 'Voltou com um vigilante para avaliar a sala.' },
   { data: '2026-09-16', sala: 101, pessoa: 3, resultado: 'fechou',     obs: 'Escritório pessoal. Fechou e alugou a sala.' },
   { data: '2026-09-21', sala: 207, pessoa: 4, resultado: 'fechou',     obs: 'Treinadora física. Gostou e ficou com a sala.' },
-  { data: '2026-10-19', sala: 103, pessoa: 1, resultado: 'negociando', obs: 'Visita com arquitetura para ver a sala.' },
+  { data: '2026-10-19', sala: 103, pessoa: 1, resultado: 'fechou',     obs: 'Visita com arquitetura para ver a sala.' },
   { data: '2026-10-20', sala: 104, pessoa: 5, resultado: 'negociando', obs: 'Gostou da 104 para consultório médico.' },
 ];
 
@@ -1169,15 +1170,50 @@ const DADOS_INICIAIS = {
   visitantes: VISITANTES_INICIAIS,
   visitas: VISITAS_RAW.map((v, i) => ({ id: i + 1, ...v })),
 };
-let dados = carregar();
 
 function carregar() {
   try {
     const salvo = localStorage.getItem(STORAGE_KEY);
-    if (salvo) return JSON.parse(salvo);
+    if (salvo) {
+      const d = JSON.parse(salvo);
+      if (migrar(d)) localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+      return d;
+    }
   } catch (e) { /* sem acesso ao armazenamento: usa os dados iniciais */ }
   return JSON.parse(JSON.stringify(DADOS_INICIAIS));
 }
+
+/* MIGRAÇÕES
+   Fatos novos que precisam chegar também em quem já tem dados salvos no navegador
+   (os DADOS_INICIAIS só valem no primeiro acesso). Cada uma roda uma única vez:
+   o id fica gravado em dados.migracoes. */
+const MIGRACOES = [
+  {
+    // Sthella fechou a 103 sem nova visita: só muda o status da sala.
+    // (substitui uma versão anterior que criava uma visita "fechou" — remove essa visita se ela tiver sido gravada)
+    id: '2026-11-11-sthella-alugou-103-v2',
+    aplicar(d) {
+      d.visitas = d.visitas.filter(v => !(v.data === '2026-11-11' && v.sala === 103 && v.pessoa === 1
+        && v.resultado === 'fechou' && v.obs === 'Estética. Fechou e alugou a sala.'));
+      d.situacao[103] = { status: 'alugada', pessoa: 1, alertas: d.situacao[103]?.alertas || [] };
+    },
+  },
+  {
+    // a última visita da Sthella (19/10, com a arquitetura) foi a que fechou
+    id: '2026-11-11-sthella-ultima-visita-fechou',
+    aplicar(d) {
+      const ultima = d.visitas.find(v => v.data === '2026-10-19' && v.sala === 103 && String(v.pessoa) === '1');
+      if (ultima) ultima.resultado = 'fechou';
+    },
+  },
+];
+function migrar(d) {
+  d.migracoes = d.migracoes || [];
+  const pendentes = MIGRACOES.filter(m => !d.migracoes.includes(m.id));
+  pendentes.forEach(m => { m.aplicar(d); d.migracoes.push(m.id); });
+  return pendentes.length > 0;
+}
+let dados = carregar();   // depois de MIGRACOES: const não sofre hoisting
 function salvar() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(dados)); } catch (e) { }
   montar();
@@ -1231,6 +1267,19 @@ function diasAtras(d) {
 const visitasDaSala = id => visitas.filter(v => v.salaId === id);
 const visitasDaPessoa = id => visitas.filter(v => v.visitanteId === id);
 const badgeResultado = r => `<span class="badge res-${r}">${RESULTADO_LABEL[r]}</span>`;
+
+// situação de cada pessoa: ser inquilina de uma sala alugada vale mais que o histórico de visitas
+// (dá para fechar sem uma visita nova); senão, vale o resultado da visita mais recente
+// (visitas já está do mais novo para o mais antigo). Usada nos indicadores e na tabela de visitantes.
+const PESSOA_STATUS_LABEL = { fechou: 'Alugou', negociando: 'Em processo', naofechou: 'Desistiu', aberto: 'Em aberto' };
+function situacaoPessoa(p) {
+  const inquilino = salas.some(s => s.status === 'alugada' && String(s.pessoa) === String(p.id));
+  return inquilino ? 'fechou' : visitasDaPessoa(p.id)[0]?.resultado;
+}
+function badgePessoa(p) {
+  const st = situacaoPessoa(p);
+  return st ? `<span class="badge res-${st}">${PESSOA_STATUS_LABEL[st]}</span>` : '<span class="muted">—</span>';
+}
 function descricaoSala(s) {
   if (s.pessoa) { const p = pessoaById(s.pessoa); return `${p.nome} · ${p.ramo}`; }
   if (s.inquilino || s.ramo) return [s.inquilino, s.ramo].filter(Boolean).join(' · ');
@@ -1254,8 +1303,15 @@ function renderResumo() {
   $('#kpi-visitas').textContent = visitas.length;
   $('#kpi-pessoas').textContent = new Set(visitas.map(v => v.visitanteId)).size;
 
-  // desistiu = a visita mais recente da pessoa terminou em "não fechou" (visitas já está do mais novo para o mais antigo)
-  const desistiram = visitantes.filter(p => visitasDaPessoa(p.id)[0]?.resultado === 'naofechou');
+  const alugaram = visitantes.filter(p => situacaoPessoa(p) === 'fechou');
+  $('#kpi-alugaram').textContent = alugaram.length;
+  $('#kpi-alugaram-box').title = alugaram.length ? alugaram.map(p => p.nome).join(', ') : 'Ninguém alugou ainda';
+
+  const emProcesso = visitantes.filter(p => situacaoPessoa(p) === 'negociando');
+  $('#kpi-processo').textContent = emProcesso.length;
+  $('#kpi-processo-box').title = emProcesso.length ? emProcesso.map(p => p.nome).join(', ') : 'Ninguém em negociação';
+
+  const desistiram = visitantes.filter(p => situacaoPessoa(p) === 'naofechou');
   $('#kpi-desistiram').textContent = desistiram.length;
   $('#kpi-desistiram-box').title = desistiram.length ? desistiram.map(p => p.nome).join(', ') : 'Ninguém desistiu';
 }
@@ -1332,14 +1388,12 @@ let sortVisitas = { key: 'data', dir: -1 };
 function renderVisitas() {
   const q = $('#visit-search').value.trim().toLowerCase();
   const sala = $('#visit-room').value;
-  const res = $('#visit-result').value;
   const de = $('#visit-from').value ? new Date($('#visit-from').value + 'T00:00') : null;
   const ate = $('#visit-to').value ? new Date($('#visit-to').value + 'T23:59') : null;
 
   let rows = visitas.filter(v => {
     const s = salaById(v.salaId), p = pessoaById(v.visitanteId);
     if (sala && v.salaId !== +sala) return false;
-    if (res && v.resultado !== res) return false;
     if (de && v.data < de) return false;
     if (ate && v.data > ate) return false;
     if (q && ![s.nome, p.nome, p.telefone, p.ramo, v.obs].some(t => t.toLowerCase().includes(q))) return false;
@@ -1351,7 +1405,6 @@ function renderVisitas() {
     sala: v => v.salaId,
     visitante: v => pessoaById(v.visitanteId).nome,
     vez: v => v.vez,
-    resultado: v => ({ fechou: 4, negociando: 3, aberto: 2, naofechou: 1 })[v.resultado],
   }[sortVisitas.key];
   rows.sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortVisitas.dir);
 
@@ -1363,11 +1416,10 @@ function renderVisitas() {
       <td><a class="link" data-sala="${s.id}">${s.nome}</a></td>
       <td>${p.nome}<div class="muted" style="font-size:12px">${p.ramo}</div></td>
       <td>${v.vez}ª</td>
-      <td>${badgeResultado(v.resultado)}</td>
       <td class="muted">${v.obs}</td>
       <td><button class="btn small" data-action="editar-visita" data-id="${v.id}">Editar</button></td>
     </tr>`;
-  }).join('') : `<tr><td colspan="7" class="empty">Nenhuma visita encontrada</td></tr>`;
+  }).join('') : `<tr><td colspan="6" class="empty">Nenhuma visita encontrada</td></tr>`;
 
   $$('#painel-visitas th[data-sort]').forEach(th => {
     th.textContent = th.textContent.replace(/ [↑↓]$/, '') + (th.dataset.sort === sortVisitas.key ? (sortVisitas.dir < 0 ? ' ↓' : ' ↑') : '');
@@ -1390,6 +1442,7 @@ function renderPessoas() {
       <td><strong>${p.nome}</strong></td>
       <td>${p.telefone}</td>
       <td>${p.ramo}</td>
+      <td>${badgePessoa(p)}</td>
       <td><strong>${vs.length}</strong></td>
       <td>${salasV.map(s => `<a class="link" data-sala="${s.id}">${s.nome}</a>`).join(', ') || '—'}</td>
       <td>${vs.length ? fmtData(vs[vs.length - 1].data) : '—'}</td>
@@ -1474,7 +1527,7 @@ function detalhePessoa(id) {
   const porSala = {};
   vs.forEach(v => (porSala[v.salaId] ||= []).push(v));
   abrirDrawer(`
-    <h3>${p.nome}</h3>
+    <h3>${p.nome} ${badgePessoa(p)}</h3>
     <div class="muted">${p.telefone || 'sem telefone'} · ${p.ramo || 'ramo não informado'}</div>
     <div class="actions">
       <button class="btn primary" data-action="nova-visita" data-pessoa-id="${p.id}">+ Registrar visita</button>
@@ -1739,6 +1792,7 @@ function importar(arquivo) {
     try {
       const novo = JSON.parse(leitor.result);
       if (!novo.situacao || !novo.visitantes || !novo.visitas) throw new Error();
+      migrar(novo);
       dados = novo;
       salvar();
       avisar('Backup importado');
@@ -1780,7 +1834,7 @@ $$('.chip[data-status]').forEach(c => c.addEventListener('click', () => {
   renderMapa();
 }));
 
-['#visit-search', '#visit-room', '#visit-result', '#visit-from', '#visit-to'].forEach(s =>
+['#visit-search', '#visit-room', '#visit-from', '#visit-to'].forEach(s =>
   $(s).addEventListener('input', renderVisitas));
 $('#people-search').addEventListener('input', renderPessoas);
 
