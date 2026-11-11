@@ -1850,9 +1850,9 @@ function destacarPredio(centro, achado) {
   if (!pinPredio) {
     const pin = document.createElement('div');
     pin.className = 'pin-simovel';
-    pin.title = 'Abrir o prédio em 3D';
+    pin.title = 'Ver o prédio de frente';
     pin.innerHTML = `<div class="placa"><b>SIMÓVEL</b><small>nosso prédio</small></div><div class="haste"></div>`;
-    pin.addEventListener('click', e => { e.stopPropagation(); if (!marcando) abrirPredio3D(); });
+    pin.addEventListener('click', e => { e.stopPropagation(); if (!marcando) vistaFachada(); });   // mesmo efeito de clicar no prédio
     pinPredio = new maplibregl.Marker({ element: pin, anchor: 'bottom' }).setLngLat(centro).addTo(mapaReal);   // posição antes do addTo
   }
   const comPredio = !!manual && colocarPredioNoMapa();
