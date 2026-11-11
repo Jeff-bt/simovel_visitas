@@ -969,6 +969,48 @@
      das bordas dela com preserve-3d. A fachada usa a MESMA grade de colunas da planta:
      107 106 105 104 | escada | 103 102 101 — cada módulo entre pilares (2 janelas) é uma sala. */
   .filtros.vista { display: inline-flex; margin: 0 0 10px; }
+
+  /* ===== VISTA MAPA: o bairro de verdade (MapLibre + OpenStreetMap), com o nosso prédio destacado ===== */
+  .mapa-real { position: relative; height: min(72vh, 680px); min-height: 380px; border-radius: 14px; overflow: hidden; background: #e9e4dc; }
+  .mapa-real[hidden] { display: none; }
+  .mapa-real #mapa-gl { position: absolute; inset: 0; }
+  .mapa-real .aviso { display: grid; place-content: center; gap: 6px; height: 100%; padding: 24px; text-align: center; color: #3a332b; }
+  .mapa-real .aviso code { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+  .mapa-acoes { position: absolute; left: 12px; top: 12px; z-index: 2; display: flex; gap: 8px; flex-wrap: wrap; }
+  .mapa-acoes[hidden], .mapa-dica[hidden] { display: none; }
+  .mapa-dica {
+    position: absolute; left: 50%; top: 12px; z-index: 2; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+    max-width: calc(100% - 90px); padding: 9px 10px 9px 14px; border-radius: 12px; font: 600 13px "Manrope", sans-serif;
+    background: #2b2520; color: #fff; box-shadow: 0 10px 24px -8px rgba(0, 0, 0, .5);
+  }
+  .mapa-dica button:disabled { opacity: .4; cursor: default; }
+  .mapa-dica button.primario { background: #c4474e; }
+  .mapa-dica button { flex: none; padding: 5px 10px; border: 0; border-radius: 999px; cursor: pointer; font: 700 12px "Manrope", sans-serif; background: rgba(255, 255, 255, .15); color: #fff; }
+  .mapa-voltar {
+    padding: 8px 12px; border: 0; border-radius: 999px; cursor: pointer;
+    font: 700 12px "Manrope", sans-serif; background: #fff; color: #2b2520; box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .35);
+  }
+  /* etiqueta flutuante em cima do prédio: é um Marker do MapLibre (HTML por cima do canvas, ancorado no ponto) */
+  .pin-simovel { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+  .pin-simovel .placa {
+    padding: 6px 12px 7px; border-radius: 8px; text-align: center; line-height: 1.2; white-space: nowrap;
+    background: #c4474e; color: #fff; box-shadow: 0 8px 20px -6px rgba(0, 0, 0, .5);
+    animation: pin-pulso 2.4s ease-in-out infinite;
+  }
+  .pin-simovel b { display: block; font: 800 13px "Manrope", sans-serif; letter-spacing: .08em; }
+  .pin-simovel small { font: 600 10px "Manrope", sans-serif; opacity: .85; }
+  .pin-simovel .haste { width: 2px; height: 70px; background: linear-gradient(#c4474e, rgba(196, 71, 78, 0)); }
+  @keyframes pin-pulso { 50% { transform: translateY(-4px); box-shadow: 0 0 0 6px rgba(196, 71, 78, .25), 0 12px 24px -6px rgba(0, 0, 0, .45); } }
+  @media (prefers-reduced-motion: reduce) { .pin-simovel .placa { animation: none; } }
+  body.vista-mapa .zoom-ctrl { display: none; }   /* o zoom da planta não vale no mapa (o mapa tem o seu) */
+  /* prédio 3D dentro do mapa: o Marker (0×0) já vem deitado/girado pelo MapLibre; aqui só centraliza e escala.
+     overflow: visible e preserve-3d em toda a cadeia — qualquer overflow/opacity no caminho achataria o 3D */
+  .predio-mapa { width: 0; height: 0; transform-style: preserve-3d; cursor: pointer; }
+  .predio-mapa .predio { position: absolute; height: 0; overflow: visible; transform-style: preserve-3d; }
+  .predio-mapa .predio-cena { left: 0; top: 0; transform: translate(-50%, -50%) scale3d(var(--escala-mapa, .1), var(--escala-mapa, .1), var(--escala-mapa, .1)); }
+  /* scale3d e não scale: aqui a escala fica DENTRO da rotação do mapa, e a altura do prédio está no eixo Z
+     (a fachada é levantada com rotateX(-90deg)); scale() 2D só encolhe X e Y e o prédio ficaria com altura fixa */
+  .predio-mapa .andar-rot, .predio-mapa .chao { display: none; }
   .predio {
     --rx: 72deg;          /* inclinação da câmera (90 = olhando reto para a fachada) */
     --rz: -16deg;         /* giro: deixa a lateral esquerda aparecer, como na foto */
@@ -1167,10 +1209,12 @@
   <div class="filtros vista" role="group" aria-label="Visualização">
     <button class="chip" data-vista="planta">Planta</button>
     <button class="chip" data-vista="predio">Prédio 3D</button>
+    <button class="chip" data-vista="mapa">Mapa</button>
   </div>
   <div class="visor" id="visor">
     <div id="floors" class="floors"></div>
   </div>
+  <div id="mapa-real" class="mapa-real" hidden></div>
 
   <div class="rodape-prancha">
 
@@ -1520,6 +1564,11 @@ function cartaoSala(s, match) {
 
 function renderMapa() {
   $$('[data-vista]').forEach(b => b.classList.toggle('active', b.dataset.vista === vista));
+  const noMapa = vista === 'mapa';
+  $('#visor').hidden = noMapa;
+  $('#mapa-real').hidden = !noMapa;
+  document.body.classList.toggle('vista-mapa', noMapa);
+  if (noMapa) { atualizarPredioMapa(); return abrirMapaReal(); }
   if (vista === 'predio') return renderPredio();
   // andar mais alto em cima, 1º embaixo (como num corte do prédio)
   const andares = [...new Set(salas.map(s => s.andar))].sort((a, b) => b - a);
@@ -1553,7 +1602,13 @@ function baiaSala(s, match, linha) {
       <span class="rot"><b>${s.id}${s.alertas.length ? ' ⚠️' : ''}</b><em>${STATUS_LABEL[s.status]}</em>${quem ? `<small>${quem}</small>` : ''}${ramo ? `<small class="ramo">${ramo}</small>` : ''}</span>
     </button>`;
 }
+const alturaPredioPx = () => ALT_PLATIBANDA + ALT_ANDAR * (Math.max(...salas.map(s => s.andar)) + 1);
 function renderPredio() {
+  $('#floors').innerHTML = htmlPredio();
+  ajustarPredio();
+}
+// o HTML do prédio sai daqui tanto para a vista "Prédio 3D" quanto para o prédio colocado no mapa
+function htmlPredio() {
   const N = Math.max(...salas.map(s => s.andar));        // andares de salas (o térreo vem a mais)
   const linha = andar => 1 + (N - andar + 1);             // linha 1 = platibanda; o andar mais alto vem logo abaixo
   const linhaTerreo = N + 2;
@@ -1561,7 +1616,7 @@ function renderPredio() {
   const meio = l => ALT_PLATIBANDA + ALT_ANDAR * (l - 2) + ALT_ANDAR / 2;   // centro vertical de uma linha (para os rótulos)
   const andares = Array.from({ length: N }, (_, i) => N - i);
 
-  $('#floors').innerHTML = `
+  return `
     <div class="predio" style="--H:${H}px"><div class="predio-cena">
       <div class="chao"></div>
       <div class="lateral"></div>
@@ -1578,12 +1633,361 @@ function renderPredio() {
         <span class="andar-rot" style="top:${meio(linhaTerreo)}px">Térreo · lojas</span>
       </div>
     </div></div>`;
-  ajustarPredio();
 }
 // a cena tem 960px de largura fixa; em telas menores ela é reduzida para caber (o zoom continua valendo por cima)
 function ajustarPredio() {
-  const el = $('.predio');
+  const el = $('#floors .predio');   // #floors: o prédio do mapa também tem .predio
   if (el) el.style.setProperty('--escala', Math.min(1, ($('#floors').clientWidth - 16) / 1080).toFixed(3));
+}
+
+/* MAPA REAL — o bairro em 3D com o nosso prédio destacado.
+   MapLibre GL (renderiza vetores com WebGL) + tiles do OpenFreeMap (dados do OpenStreetMap): sem chave, sem cobrança.
+   A biblioteca só é baixada quando alguém abre a aba Mapa (lazy loading), então a planta continua leve e offline. */
+const PREDIO_LOCAL = null;   // opcional: { lat, lng } fixo no código. O normal é marcar pelo app (Mapa → clicar no prédio), que salva em dados.localPredio
+const MAPLIBRE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl';
+const MAPA_ESTILO = 'https://tiles.openfreemap.org/styles/liberty';
+const COR_NOSSO = '#c4474e';   // o mesmo vermelho dos pilares da fachada 3D
+let mapaReal = null, carregandoMapLibre = null;
+
+function carregarMapLibre() {
+  if (window.maplibregl) return Promise.resolve();
+  // guarda a Promise: dois cliques seguidos não baixam a lib duas vezes
+  return carregandoMapLibre ||= new Promise((ok, falha) => {
+    const css = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: MAPLIBRE_URL + '.css' });
+    const js = Object.assign(document.createElement('script'), { src: MAPLIBRE_URL + '.js', onload: ok });
+    js.onerror = () => { carregandoMapLibre = null; js.remove(); falha(); };   // permite tentar de novo depois
+    document.head.append(css, js);
+  });
+}
+
+// onde está o prédio: primeiro o que foi marcado no app (fica em "dados", entra no backup); senão a constante do código
+const localPredio = () => dados.localPredio || PREDIO_LOCAL;
+const CENTRO_CIDADE = [-47.978, -16.062];   // Valparaíso de Goiás — onde o mapa abre enquanto o prédio não foi marcado
+let marcando = false, pinPredio = null;
+
+async function abrirMapaReal() {
+  const el = $('#mapa-real');
+  if (mapaReal) { mapaReal.resize(); return; }   // o mapa é criado uma vez só; ao voltar para a aba só reajusta o tamanho
+  try { await carregarMapLibre(); }
+  catch { el.innerHTML = `<div class="aviso"><b>Não deu para carregar o mapa</b><span>Verifique a internet e abra a aba de novo.</span></div>`; return; }
+  if (mapaReal) return;
+
+  el.innerHTML = `<div id="mapa-gl"></div>
+    <div class="mapa-acoes">
+      <button class="mapa-voltar" data-mapa="voltar" type="button">📍 Voltar ao prédio</button>
+      <button class="mapa-voltar" data-mapa="marcar" type="button">✏️ Contornar prédio</button>
+      <button class="mapa-voltar" data-mapa="camada" type="button">${satelite ? '🗺️ Ver mapa' : '🛰️ Ver satélite'}</button>
+    </div>
+    <div class="mapa-dica" hidden><span></span>
+      <button type="button" data-mapa="desfazer">Desfazer</button>
+      <button type="button" data-mapa="concluir" class="primario">Concluir</button>
+      <button type="button" data-mapa="cancelar">Cancelar</button></div>`;
+  const local = localPredio();
+  mapaReal = new maplibregl.Map({
+    container: 'mapa-gl', style: MAPA_ESTILO, maxPitch: 75,
+    center: local ? [local.lng, local.lat] : CENTRO_CIDADE, zoom: local ? 15 : 14, pitch: 0,   // atenção: o MapLibre usa [longitude, latitude]
+  });
+  mapaReal.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+  // retry com backoff: se o estilo (o "esqueleto" do mapa) falhar ao baixar — rede instável, recém-conectado —
+  // tenta de novo após 1,5 s, 3 s e 4,5 s. Falhas de tiles soltos o próprio MapLibre já tolera.
+  let estiloOk = false, tentativas = 0;
+  mapaReal.once('style.load', () => estiloOk = true);
+  mapaReal.on('error', () => {
+    if (estiloOk || tentativas >= 3) return;
+    tentativas++;
+    setTimeout(() => !estiloOk && mapaReal.setStyle(MAPA_ESTILO), 1500 * tentativas);
+  });
+  el.querySelector('[data-mapa="voltar"]').addEventListener('click', voarAoPredio);
+  el.querySelector('[data-mapa="marcar"]').addEventListener('click', () => modoMarcar(true));
+  el.querySelector('[data-mapa="cancelar"]').addEventListener('click', () => modoMarcar(false));
+  el.querySelector('[data-mapa="camada"]').addEventListener('click', () => aplicarCamada(!satelite));
+  el.querySelector('[data-mapa="desfazer"]').addEventListener('click', () => { pontos.pop(); desenharRascunho(); atualizarDica(); });
+  el.querySelector('[data-mapa="concluir"]').addEventListener('click', concluirContorno);
+  mapaReal.on('click', e => marcando && cliqueContorno(e));
+  // duplo clique = 2 cliques + dblclick: o 2º clique criou um canto repetido, que é descartado antes de concluir
+  mapaReal.on('dblclick', e => { if (!marcando) return; e.preventDefault(); pontos.pop(); concluirContorno(); });
+
+  mapaReal.once('load', () => {
+    // vizinhos um pouco apagados: o destaque vem do contraste
+    if (mapaReal.getLayer('building-3d')) mapaReal.setPaintProperty('building-3d', 'fill-extrusion-opacity', .6);
+    // foto de satélite como camada raster logo acima do fundo: tudo que é desenhado (ruas, nomes, nosso prédio) fica por cima dela
+    mapaReal.addSource('satelite', SATELITE);
+    mapaReal.addLayer({ id: 'satelite', type: 'raster', source: 'satelite', layout: { visibility: 'none' } }, mapaReal.getStyle().layers[1].id);
+    aplicarCamada(satelite);
+    mapaReal.on('click', 'nosso-predio-3d', () => !marcando && abrirPredio3D());
+    mapaReal.on('mouseenter', 'nosso-predio-3d', () => !marcando && (mapaReal.getCanvas().style.cursor = 'pointer'));
+    mapaReal.on('mouseleave', 'nosso-predio-3d', () => !marcando && (mapaReal.getCanvas().style.cursor = ''));
+    mapaReal.once('idle', () => {
+      if (!localPredio()) return modoMarcar(true);   // primeira vez: pede para marcar
+      destacarPredio([local.lng, local.lat]);
+      setTimeout(voarAoPredio, 400);
+    });
+  });
+}
+
+/* camada da cidade: satélite (foto real, padrão) ou mapa desenhado.
+   No satélite fica um "híbrido": a foto + só os nomes de ruas e lugares (camadas symbol) + o nosso prédio em 3D.
+   Áreas, ruas desenhadas e os blocos dos vizinhos somem, senão cobririam a foto. */
+const SATELITE = {
+  type: 'raster', tileSize: 256, maxzoom: 19,
+  tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],   // atenção: {y} antes de {x}
+  attribution: 'Imagens © Esri, Maxar, Earthstar Geographics',
+};
+let satelite = true;
+try { satelite = localStorage.getItem('simovel-mapa-camada') !== 'mapa'; } catch (e) { }
+
+function aplicarCamada(sat) {
+  satelite = sat;
+  try { localStorage.setItem('simovel-mapa-camada', sat ? 'satelite' : 'mapa'); } catch (e) { }
+  $('#mapa-real [data-mapa="camada"]').textContent = sat ? '🗺️ Ver mapa' : '🛰️ Ver satélite';
+  $('#mapa-real').classList.toggle('satelite', sat);
+  if (!mapaReal.getLayer('satelite')) return;   // estilo ainda carregando: o 'load' aplica a escolha quando terminar
+  for (const camada of mapaReal.getStyle().layers) {
+    if (camada.id.startsWith('nosso-')) continue;
+    const visivel = camada.id === 'satelite' ? sat : (!sat || camada.type === 'symbol');
+    mapaReal.setLayoutProperty(camada.id, 'visibility', visivel ? 'visible' : 'none');
+  }
+}
+
+/* CONTORNO DO PRÉDIO — o usuário desenha o polígono clicando nos cantos, em cima da foto de satélite.
+   Rascunho ao vivo numa fonte GeoJSON própria (pontos + linha/área); ao concluir, o anel vira o "chão" do bloco 3D. */
+const ALTURA_PREDIO = 11;   // m: térreo + 2 andares (~3,5 m cada)
+let pontos = [];            // cantos [lng, lat] do contorno em desenho
+
+function modoMarcar(ligado) {
+  marcando = ligado;
+  pontos = [];
+  desenharRascunho();
+  $('#mapa-real .mapa-dica').hidden = !ligado;
+  $('#mapa-real .mapa-acoes').hidden = ligado;
+  mapaReal.getCanvas().style.cursor = ligado ? 'crosshair' : '';
+  // durante o desenho o duplo clique conclui o contorno (em vez de dar zoom)
+  ligado ? mapaReal.doubleClickZoom.disable() : mapaReal.doubleClickZoom.enable();
+  // o prédio atual some enquanto redesenha, para a foto embaixo dele aparecer
+  const comContorno = !!localPredio()?.contorno;
+  if (mapaReal.getLayer('nosso-predio-3d')) mapaReal.setLayoutProperty('nosso-predio-3d', 'visibility', ligado || comContorno ? 'none' : 'visible');
+  if (predioMapa) predioMapa.el.style.display = ligado ? 'none' : '';
+  if (pinPredio) pinPredio.getElement().style.display = ligado ? 'none' : '';
+  if (ligado) {
+    // vista de cima (sem inclinação): clicar nos cantos fica preciso
+    const local = localPredio();
+    mapaReal.easeTo({ pitch: 0, bearing: 0, duration: 800, ...(local && { center: [local.lng, local.lat], zoom: 18.5 }) });
+    atualizarDica();
+  }
+}
+
+function cliqueContorno(e) {
+  // clicar perto do 1º ponto fecha o contorno (tolerância de 12 px, medida na tela, não em metros)
+  if (pontos.length >= 3) {
+    const p0 = mapaReal.project(pontos[0]);
+    if (Math.hypot(p0.x - e.point.x, p0.y - e.point.y) < 12) return concluirContorno();
+  }
+  pontos.push([+e.lngLat.lng.toFixed(7), +e.lngLat.lat.toFixed(7)]);
+  desenharRascunho();
+  atualizarDica();
+}
+
+function desenharRascunho() {
+  const feicoes = pontos.map(p => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } }));
+  if (pontos.length >= 2) feicoes.push({
+    type: 'Feature', properties: {},
+    geometry: pontos.length >= 3 ? { type: 'Polygon', coordinates: [[...pontos, pontos[0]]] } : { type: 'LineString', coordinates: pontos },
+  });
+  const geo = { type: 'FeatureCollection', features: feicoes };
+  if (mapaReal.getSource('nosso-rascunho')) return mapaReal.getSource('nosso-rascunho').setData(geo);
+  if (!mapaReal.getLayer('satelite')) return;   // estilo ainda carregando
+  mapaReal.addSource('nosso-rascunho', { type: 'geojson', data: geo });
+  // as camadas filtram pelo tipo de geometria: uma fonte só alimenta área, linha e pontos
+  mapaReal.addLayer({ id: 'nosso-rascunho-area', type: 'fill', source: 'nosso-rascunho', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': COR_NOSSO, 'fill-opacity': .3 } });
+  mapaReal.addLayer({ id: 'nosso-rascunho-linha', type: 'line', source: 'nosso-rascunho', filter: ['!=', '$type', 'Point'], paint: { 'line-color': '#fff', 'line-width': 2, 'line-dasharray': [2, 1] } });
+  mapaReal.addLayer({ id: 'nosso-rascunho-pontos', type: 'circle', source: 'nosso-rascunho', filter: ['==', '$type', 'Point'], paint: { 'circle-radius': 5, 'circle-color': COR_NOSSO, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+}
+
+function atualizarDica() {
+  const n = pontos.length;
+  $('#mapa-real .mapa-dica span').innerHTML =
+    n === 0 ? 'Comece pelos <b>2 cantos da fachada</b> (a frente do prédio)'
+    : n === 1 ? 'Agora o <b>outro canto da fachada</b>'
+    : n === 2 ? 'Fachada ok. Agora os <b>cantos do fundo</b>'
+    : `${n} cantos — clique no 1º ponto, dê duplo clique ou <b>conclua</b>`;
+  $('#mapa-real [data-mapa="desfazer"]').disabled = !n;
+  $('#mapa-real [data-mapa="concluir"]').disabled = n < 3;
+}
+
+function concluirContorno() {
+  if (pontos.length < 3) return;
+  const lng = pontos.reduce((s, p) => s + p[0], 0) / pontos.length;   // centro = média dos cantos (bom o bastante para um prédio)
+  const lat = pontos.reduce((s, p) => s + p[1], 0) / pontos.length;
+  dados.localPredio = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), contorno: [...pontos, pontos[0]] };   // anel fechado: o último = o primeiro
+  modoMarcar(false);
+  salvar();
+  destacarPredio([lng, lat]);
+  voarAoPredio();
+  avisar('Contorno do prédio salvo');
+}
+
+// desenha o nosso prédio em 3D. Prioridade: contorno desenhado no app > contorno do OpenStreetMap > bloco de ~20 m no ponto
+function destacarPredio(centro, achado) {
+  const manual = localPredio()?.contorno;
+  if (!manual) achado ||= mapaReal.querySourceFeatures('openmaptiles', { sourceLayer: 'building' })
+    .find(f => f.geometry.type === 'Polygon' && pontoNoPoligono(centro, f.geometry.coordinates[0]));
+  const altura = manual ? ALTURA_PREDIO : achado?.properties.render_height || 12;
+  const contorno = manual || (achado
+    ? ampliar(achado.geometry.coordinates[0], 1.03)       // 3% maior: as paredes ficam por fora das do vizinho bege (evita z-fighting)
+    : quadradoEm(centro, 10));
+  const dadosGeo = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [contorno] } };
+  if (mapaReal.getSource('nosso-predio')) {
+    mapaReal.getSource('nosso-predio').setData(dadosGeo);          // remarcação: só troca o contorno
+    mapaReal.setPaintProperty('nosso-predio-3d', 'fill-extrusion-height', altura + .5);
+  } else {
+    mapaReal.addSource('nosso-predio', { type: 'geojson', data: dadosGeo });
+    mapaReal.addLayer({
+      id: 'nosso-predio-3d', type: 'fill-extrusion', source: 'nosso-predio',
+      paint: { 'fill-extrusion-color': COR_NOSSO, 'fill-extrusion-height': altura + .5, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': .95 },
+    });
+  }
+  // etiqueta "SIMÓVEL" flutuando sobre o prédio; clicar nela abre a vista do prédio 3D
+  if (!pinPredio) {
+    const pin = document.createElement('div');
+    pin.className = 'pin-simovel';
+    pin.title = 'Abrir o prédio em 3D';
+    pin.innerHTML = `<div class="placa"><b>SIMÓVEL</b><small>nosso prédio</small></div><div class="haste"></div>`;
+    pin.addEventListener('click', e => { e.stopPropagation(); if (!marcando) abrirPredio3D(); });
+    pinPredio = new maplibregl.Marker({ element: pin, anchor: 'bottom' }).setLngLat(centro).addTo(mapaReal);   // posição antes do addTo
+  }
+  const comPredio = !!manual && colocarPredioNoMapa();
+  mapaReal.setLayoutProperty('nosso-predio-3d', 'visibility', comPredio ? 'none' : 'visible');
+  pinPredio.setLngLat(comPredio ? predioMapa.geo.centro : centro);
+  escalarPredioMapa();
+  return !!(manual || achado);
+}
+
+/* PRÉDIO NO MAPA — o MESMO prédio da vista "Prédio 3D" (mesmo htmlPredio, mesmo CSS) em cima do contorno marcado.
+   Vai dentro de um Marker com pitchAlignment/rotationAlignment 'map': o MapLibre deita o elemento no plano do chão
+   (rotateX = inclinação da câmera, rotateZ = giro do mapa) e o preserve-3d do prédio levanta as paredes a partir dali.
+   Escala: o CSS tem 960 px de largura; a cada zoom convertemos a largura real (m) em pixels na tela. */
+let predioMapa = null;   // { el, marker, geo }
+
+// lng/lat -> metros num plano local (aproximação ótima para ~100 m) e a geometria da fachada:
+// a 1ª aresta do contorno (os 2 primeiros cliques) é a fachada; o resto define a profundidade
+function geometriaFachada(contorno) {
+  const anel = contorno.slice(0, -1);                    // tira o ponto repetido que fecha o anel
+  const [lng0, lat0] = anel[0];
+  const kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 111320;   // metros por grau (lng encolhe com a latitude)
+  const pts = anel.map(([lng, lat]) => [(lng - lng0) * kx, (lat - lat0) * ky]);   // x = leste, y = norte
+  let A = pts[0], B = pts[1];
+  const L = Math.hypot(B[0] - A[0], B[1] - A[1]);
+  let u = [(B[0] - A[0]) / L, (B[1] - A[1]) / L];        // direção da fachada
+  let n = [-u[1], u[0]];                                  // normal à esquerda de A→B: para onde o prédio "entra"
+  const dist = p => (p[0] - A[0]) * n[0] + (p[1] - A[1]) * n[1];
+  // o corpo do prédio tem de ficar atrás da fachada; se ficou do outro lado, inverte o sentido da aresta
+  if (-Math.min(...pts.map(dist)) > Math.max(...pts.map(dist))) { [A, B] = [B, A]; u = [-u[0], -u[1]]; n = [-n[0], -n[1]]; }
+  const P = Math.max(...pts.map(dist));                   // profundidade = ponto mais distante da fachada
+  const c = [A[0] + u[0] * L / 2 + n[0] * P / 2, A[1] + u[1] * L / 2 + n[1] * P / 2];
+  return {
+    centro: [lng0 + c[0] / kx, lat0 + c[1] / ky], larguraM: L, profM: Math.max(P, 3),
+    rumo: Math.atan2(u[0], u[1]) * 180 / Math.PI,         // rumo da fachada (A→B), em graus a partir do norte
+  };
+}
+const metrosPorPixel = (lat, zoom) => 40075016.686 * Math.cos(lat * Math.PI / 180) / (512 * 2 ** zoom);   // tiles de 512 px no MapLibre
+
+function colocarPredioNoMapa() {
+  const local = localPredio();
+  if (!local?.contorno || !mapaReal) return false;
+  const geo = geometriaFachada(local.contorno);
+  if (!predioMapa) {
+    const el = document.createElement('div');
+    el.className = 'predio-mapa';
+    el.title = 'Ver de frente';
+    el.addEventListener('click', e => { if (!e.target.closest('[data-sala]') && !marcando) vistaFachada(); });   // sala: o clique global abre a gaveta
+    const marker = new maplibregl.Marker({ element: el, anchor: 'center', pitchAlignment: 'map', rotationAlignment: 'map' })
+      .setLngLat(geo.centro).addTo(mapaReal);
+    predioMapa = { el, marker };
+    mapaReal.on('move', escalarPredioMapa);
+  }
+  predioMapa.geo = geo;
+  // o CSS desenha a fachada virada para o "sul" da cena (embaixo); girar (rumo − 90) alinha a fachada com a aresta marcada
+  predioMapa.marker.setLngLat(geo.centro).setRotation(geo.rumo - 90);
+  atualizarPredioMapa();
+  return true;
+}
+
+// conteúdo (salas, status, filtro) — chamado pelo renderMapa sempre que os dados mudam
+function atualizarPredioMapa() {
+  if (!predioMapa) return;
+  predioMapa.el.innerHTML = htmlPredio();
+  const { larguraM, profM } = predioMapa.geo;
+  predioMapa.el.querySelector('.predio').style.setProperty('--D', (profM / larguraM * 960).toFixed(1) + 'px');   // profundidade proporcional ao real
+  escalarPredioMapa();
+}
+
+function escalarPredioMapa() {
+  if (!predioMapa?.geo) return;
+  const { centro, larguraM } = predioMapa.geo;
+  const escala = larguraM / metrosPorPixel(centro[1], mapaReal.getZoom()) / 960;
+  predioMapa.el.style.setProperty('--escala-mapa', escala.toFixed(4));
+  // a etiqueta SIMÓVEL sobe junto com a altura do prédio na tela (altura × seno da inclinação)
+  if (pinPredio) pinPredio.setOffset([0, -alturaPredioPx() * escala * Math.sin(mapaReal.getPitch() * Math.PI / 180) - 8]);
+}
+
+// câmera de frente para a fachada, no mesmo ângulo da vista "Prédio 3D" (rotateX 72°, rotateZ −16°)
+function vistaFachada() {
+  if (!predioMapa?.geo) return voarAoPredio();
+  const { centro, larguraM, rumo } = predioMapa.geo;
+  const { clientWidth: W, clientHeight: H } = mapaReal.getContainer();
+  // enquadramento: projeta os 8 cantos da caixa do prédio com as MESMAS rotações do CSS (rotateX 72°, rotateZ −16°),
+  // em projeção ortográfica, e acha o retângulo que ele ocupa na tela (por px de escala)
+  const caixa = caixaNaTela(72, -16);
+  const s = Math.min(W * .86 / (caixa.maxX - caixa.minX), H * .8 / (caixa.maxY - caixa.minY), 1.3);
+  const zoom = Math.log2(40075016.686 * Math.cos(centro[1] * Math.PI / 180) * 960 * s / (512 * larguraM));
+  // a câmera mira o chão no meio do prédio; o offset leva o centro do retângulo (e não o chão) para o meio da tela
+  const offset = [-(caixa.minX + caixa.maxX) / 2 * s, -(caixa.minY + caixa.maxY) / 2 * s];
+  mapaReal.flyTo({ center: centro, zoom: Math.min(zoom, 22), pitch: 72, bearing: rumo - 74, offset, duration: 2600, essential: true });
+}
+
+// retângulo na tela (escala 1) do prédio visto com inclinação p e giro r — relativo ao ponto central do chão
+function caixaNaTela(p, r) {
+  const { larguraM, profM } = predioMapa.geo;
+  const W = 960, D = W * profM / larguraM, A = alturaPredioPx() + 84;   // + torre da caixa d'água
+  const [sp, cp, sr, cr] = [Math.sin(p * Math.PI / 180), Math.cos(p * Math.PI / 180), Math.sin(r * Math.PI / 180), Math.cos(r * Math.PI / 180)];
+  const xs = [], ys = [];
+  for (const x of [-W / 2, W / 2]) for (const y of [-D / 2, D / 2]) for (const z of [0, A]) {
+    const xr = x * cr - y * sr, yr = x * sr + y * cr;   // rotateZ
+    xs.push(xr); ys.push(yr * cp - z * sp);             // rotateX (z para fora da tela = "para cima" depois de deitar)
+  }
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+
+// ray casting: conta quantas arestas um raio horizontal saindo do ponto cruza; ímpar = dentro
+function pontoNoPoligono([x, y], anel) {
+  let dentro = false;
+  for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+    const [xi, yi] = anel[i], [xj, yj] = anel[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+function ampliar(anel, k) {
+  const cx = anel.reduce((s, p) => s + p[0], 0) / anel.length, cy = anel.reduce((s, p) => s + p[1], 0) / anel.length;
+  return anel.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k]);
+}
+function quadradoEm([lng, lat], metros) {
+  const dLat = metros / 111320, dLng = metros / (111320 * Math.cos(lat * Math.PI / 180));
+  return [[lng - dLng, lat - dLat], [lng + dLng, lat - dLat], [lng + dLng, lat + dLat], [lng - dLng, lat + dLat], [lng - dLng, lat - dLat]];
+}
+
+function voarAoPredio() {
+  const local = localPredio();
+  if (!local) return modoMarcar(true);
+  if (predioMapa?.geo) return vistaFachada();
+  mapaReal.flyTo({ center: [local.lng, local.lat], zoom: local.contorno ? 18.2 : 17.4, pitch: 60, bearing: -25, duration: 3200, essential: true });
+}
+function abrirPredio3D() {
+  vista = 'predio';
+  try { localStorage.setItem('simovel-vista', vista); } catch (e) { }
+  renderMapa();
+  larguraBase();
 }
 
 function renderPendencias() {
@@ -2133,6 +2537,7 @@ $$('[data-vista]').forEach(b => b.addEventListener('click', () => {
   vista = b.dataset.vista;
   try { localStorage.setItem('simovel-vista', vista); } catch (e) { }
   renderMapa();
+  if (vista !== 'mapa') larguraBase();   // o visor estava escondido (largura 0): recalcula a largura da planta
 }));
 window.addEventListener('resize', ajustarPredio);
 
@@ -2241,7 +2646,7 @@ let zoom = 1, zoomAjuste = 1, ultimaLargura = 0;
 // e começa reduzida para caber inteira (zoomAjuste); isso é o "100%" para quem usa.
 function larguraBase() {
   const w = visor.clientWidth;
-  if (w === ultimaLargura) return; // ignora mudanças só de altura (barra do navegador no celular)
+  if (!w || w === ultimaLargura) return;   // !w: visor escondido (aba Mapa) // ignora mudanças só de altura (barra do navegador no celular)
   ultimaLargura = w;
   const vertical = matchMedia('(max-width: 760px)').matches;
   const base = vertical ? w : Math.max(w, LARGURA_MIN);
