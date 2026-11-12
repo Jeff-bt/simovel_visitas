@@ -1643,7 +1643,14 @@ function ajustarPredio() {
 /* MAPA REAL — o bairro em 3D com o nosso prédio destacado.
    MapLibre GL (renderiza vetores com WebGL) + tiles do OpenFreeMap (dados do OpenStreetMap): sem chave, sem cobrança.
    A biblioteca só é baixada quando alguém abre a aba Mapa (lazy loading), então a planta continua leve e offline. */
-const PREDIO_LOCAL = null;   // opcional: { lat, lng } fixo no código. O normal é marcar pelo app (Mapa → clicar no prédio), que salva em dados.localPredio
+// local padrão do prédio, fixo no código: vale em qualquer navegador/máquina. Uma marcação feita pelo app
+// (Mapa → Contornar prédio, salva em dados.localPredio) tem prioridade sobre este valor — ver localPredio() abaixo.
+// contorno = cantos [lng, lat] do prédio, anel fechado (o último repete o primeiro); é ele que ativa a fachada 3D no mapa
+const PREDIO_LOCAL = {
+  lat: -16.084534, lng: -47.983071,
+  contorno: [[-47.9832112, -16.0845386], [-47.9829562, -16.0843986], [-47.982903, -16.0844874],
+             [-47.9831356, -16.0846194], [-47.9831468, -16.0846248], [-47.9832112, -16.0845386]],
+};
 const MAPLIBRE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl';
 const MAPA_ESTILO = 'https://tiles.openfreemap.org/styles/liberty';
 const COR_NOSSO = '#c4474e';   // o mesmo vermelho dos pilares da fachada 3D
