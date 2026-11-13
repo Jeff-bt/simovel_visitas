@@ -1337,9 +1337,9 @@ const SITUACAO = {
   104: { status: 'processo', pessoa: 5 },   // Wesleany
   105: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Piso oco quebrado' }] },
   107: { status: 'alugada', inquilino: 'Sem nome', ramo: 'Contabilidade' },   // inquilino sem visita registrada: use inquilino/ramo direto
-  201: { status: 'indisponivel', motivo: 'Sem chaves' },
+  201: { status: 'alugada', inquilino: 'Divaldo Martins', ramo: 'Sem identificação' },
   202: { status: 'disponivel', alertas: [{ nivel: 'atencao', texto: 'Monitoramento — sala com um computador para as câmeras' }] },
-  203: { status: 'indisponivel', motivo: 'Sem chaves' },
+  203: { status: 'alugada', inquilino: 'Divaldo Martins', ramo: 'Sem identificação' },
   205: { status: 'disponivel', alertas: [{ nivel: 'problema', texto: 'Porta não abre' }] },
   206: { status: 'disponivel', alertas: [{ nivel: 'atencao', texto: 'Depósito — sala com várias caixas' }] },
   207: { status: 'alugada',  pessoa: 4 },   // Jessyca
@@ -1409,6 +1409,31 @@ const MIGRACOES = [
     aplicar(d) {
       const ultima = d.visitas.find(v => v.data === '2026-10-19' && v.sala === 103 && String(v.pessoa) === '1');
       if (ultima) ultima.resultado = 'fechou';
+    },
+  },
+  {
+    // 201 e 203 não estavam "sem chaves": já estão alugadas (inquilino ainda não informado)
+    id: '2026-11-13-201-203-alugadas',
+    aplicar(d) {
+      [201, 203].forEach(n => {
+        const atual = d.situacao[n] || {};
+        if (atual.status === 'indisponivel' && atual.motivo === 'Sem chaves') {
+          d.situacao[n] = { status: 'alugada', alertas: atual.alertas || [] };
+        }
+      });
+    },
+  },
+  {
+    // 201 e 203 são do Divaldo Martins (ramo não identificado).
+    // Substitui uma versão anterior que gravava "Sem nome / Sem ramo": também corrige quem já tem esses valores salvos.
+    id: '2026-11-13-201-203-divaldo',
+    aplicar(d) {
+      [201, 203].forEach(n => {
+        const atual = d.situacao[n];
+        if (atual?.status !== 'alugada' || atual.pessoa) return;
+        if (!atual.inquilino || atual.inquilino === 'Sem nome') atual.inquilino = 'Divaldo Martins';
+        if (!atual.ramo || atual.ramo === 'Sem ramo') atual.ramo = 'Sem identificação';
+      });
     },
   },
 ];
